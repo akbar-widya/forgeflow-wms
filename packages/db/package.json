@@ -1,0 +1,23 @@
+{
+  "name": "@forgeflow/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply forgeflow-wms --local --config ../../apps/api/wrangler.jsonc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.36.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.80.0"
+  }
+}

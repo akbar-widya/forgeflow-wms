@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--secondary);
+  --color-accent-foreground: var(--foreground);
+  --color-success: var(--success);
+  --color-success-foreground: #ffffff;
+  --color-warning: var(--warning);
+  --color-warning-foreground: #ffffff;
+  --color-danger: var(--danger);
+  --color-danger-foreground: #ffffff;
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+}
+
+:root {
+  --background: #f9f9ff;
+  --foreground: #262626;
+  --card: #ffffff;
+  --primary: #1890ff;
+  --secondary: #fafafa;
+  --muted: #8c8c8c;
+  --border: #f0f0f0;
+  --success: #52c41a;
+  --warning: #faad14;
+  --danger: #ff4d4f;
+}
+
+.dark {
+  --background: #0a0a0c;
+  --foreground: #f1f3f9;
+  --card: #141416;
+  --primary: #177ddc;
+  --secondary: #1f1f23;
+  --muted: #434343;
+  --border: #303030;
+  --success: #49aa19;
+  --warning: #d89614;
+  --danger: #a61d24;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Core utilities from DESIGN.md */
+.industrial-border {
+  border: 1px solid var(--border);
+}
+
+.surface-dim {
+  background-color: var(--secondary);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.data-table-cell {
+  padding: 12px 16px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  border-left: 2px solid transparent;
+  color: var(--foreground);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.sidebar-nav-item:hover {
+  background-color: var(--secondary);
+}
+
+.sidebar-nav-item.active {
+  border-left-color: var(--primary);
+  background-color: rgba(24, 144, 255, 0.06);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+/* Data table */
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.data-table th {
+  background-color: var(--secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:nth-child(even) {
+  background-color: var(--secondary);
+}
+
+.data-table tbody tr:hover {
+  background-color: rgba(24, 144, 255, 0.04);
+}
+
+/* Fonts */
+.font-mono {
+  font-family: var(--font-mono);
+}

@@ -1,0 +1,25 @@
+{
+  "name": "forgeflow-wms",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm --parallel --filter @forgeflow/web --filter @forgeflow/api dev",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "db:generate": "pnpm --filter @forgeflow/db db:generate",
+    "db:migrate:local": "pnpm --filter @forgeflow/db db:migrate:local",
+    "db:up": "pnpm db:generate && pnpm db:migrate:local"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.5.0"
+  }
+}

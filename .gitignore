@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+worker-configuration.d.ts
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Temp / test artifacts
+adj.json
+body.json
+body2.json
+insp.json
+iss.json
+item.json
+job.json
+loc.json
+loc2.json
+po.json
+recv.json
+trf.json
+wh.json
+zone.json
+cookies.txt
+web-cookies.txt
+skills-lock.json
