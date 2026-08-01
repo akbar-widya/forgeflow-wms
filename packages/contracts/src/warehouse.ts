@@ -56,6 +56,15 @@ export const zoneSchema = z.object({
 
 export type Zone = z.infer<typeof zoneSchema>;
 
+export const createZoneRequestSchema = z.object({
+  code: z.string().min(1).max(20),
+  name: z.string().min(1).max(120),
+  type: zoneTypeSchema.default("storage"),
+  status: warehouseStatusSchema.default("active")
+});
+
+export type CreateZoneRequest = z.infer<typeof createZoneRequestSchema>;
+
 export const locationTypeSchema = z.enum([
   "rack",
   "bin",
@@ -103,3 +112,18 @@ export const warehouseLocationsResponseSchema = z.object({
 export type WarehouseLocationsResponse = z.infer<
   typeof warehouseLocationsResponseSchema
 >;
+
+export const locationListItemSchema = locationSchema.extend({
+  warehouseCode: z.string(),
+  warehouseName: z.string(),
+  zoneCode: z.string(),
+  zoneName: z.string()
+});
+
+export type LocationListItem = z.infer<typeof locationListItemSchema>;
+
+export const locationListResponseSchema = z.object({
+  items: z.array(locationListItemSchema)
+});
+
+export type LocationListResponse = z.infer<typeof locationListResponseSchema>;

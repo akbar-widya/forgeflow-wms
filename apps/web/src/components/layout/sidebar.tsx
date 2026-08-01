@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Boxes, ClipboardList, LayoutDashboard, MoveRight, Truck, Bell } from "lucide-react";
+import { Boxes, ClipboardList, Database, LayoutDashboard, MoveRight, Truck, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
@@ -20,6 +20,10 @@ const NAV_GROUPS = [
       { to: "/movements", label: "Stock Movements", icon: MoveRight },
       { to: "/notifications", label: "Notifications", icon: Bell }
     ]
+  },
+  {
+    label: "Setup",
+    items: [{ to: "/master-data", label: "Master Data", icon: Database }]
   }
 ];
 

@@ -7,6 +7,7 @@ import { ReceivingPage } from "@/pages/receiving";
 import { JobAllocationPage } from "@/pages/job-allocation";
 import { MovementsPage } from "@/pages/movements";
 import { NotificationsPage } from "@/pages/notifications";
+import { MasterDataPage } from "@/pages/master-data";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/outbound/job-allocation" element={<JobAllocationPage />} />
           <Route path="/movements" element={<MovementsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/master-data" element={<MasterDataPage />} />
         </Route>
       </Route>
 

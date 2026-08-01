@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, RotateCcw, Workflow } from "lucide-react";
@@ -43,8 +43,8 @@ function CreateJobDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: warehouses } = useWarehouses({ pageSize: 100 });
-  const { data: items } = useItems({ pageSize: 100 });
+  const { data: warehouses, refetch: refetchWarehouses } = useWarehouses({ pageSize: 100 });
+  const { data: items, refetch: refetchItems } = useItems({ pageSize: 100 });
   const createJob = useCreateJob();
   const [warehouseId, setWarehouseId] = useState("");
   const [workOrderRef, setWorkOrderRef] = useState("");
@@ -52,6 +52,17 @@ function CreateJobDialog({
     { itemId: string; requiredQty: number }[]
   >([{ itemId: "", requiredQty: 0 }]);
   const [submitting, setSubmitting] = useState(false);
+
+  const warehouseList = warehouses?.items ?? [];
+  const itemList = items?.items ?? [];
+  const hasMasterData = warehouseList.length > 0 && itemList.length > 0;
+
+  useEffect(() => {
+    if (open) {
+      refetchWarehouses();
+      refetchItems();
+    }
+  }, [open, refetchWarehouses, refetchItems]);
 
   function handleCreate() {
     const validLines = lines.filter((l) => l.itemId && l.requiredQty > 0);
@@ -94,15 +105,20 @@ function CreateJobDialog({
             <div className="space-y-1.5">
               <Label>Warehouse</Label>
               <Select value={warehouseId} onValueChange={setWarehouseId}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select warehouse" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(warehouses?.items ?? []).map((w) => (
+                  {warehouseList.map((w) => (
                     <SelectItem key={w.id} value={w.id}>
                       {w.code} · {w.name}
                     </SelectItem>
                   ))}
+                  {warehouseList.length === 0 && (
+                    <SelectItem value="__none" disabled>
+                      No warehouses — create one in Master Data
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -132,11 +148,16 @@ function CreateJobDialog({
                     <SelectValue placeholder="Select item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(items?.items ?? []).map((item) => (
+                    {itemList.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.sku} · {item.name}
                       </SelectItem>
                     ))}
+                    {itemList.length === 0 && (
+                      <SelectItem value="__none" disabled>
+                        No items — create one in Master Data
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 <Input
@@ -175,10 +196,19 @@ function CreateJobDialog({
         </div>
 
         <DialogFooter>
+          {!hasMasterData && (
+            <p className="mr-auto text-xs text-muted-foreground">
+              Create a warehouse and an item under Master Data to enable job creation.
+            </p>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={submitting}>
+          <Button
+            onClick={handleCreate}
+            disabled={submitting || !hasMasterData}
+            title={!hasMasterData ? "Warehouses and items required" : undefined}
+          >
             {submitting ? "Creating..." : "Create job"}
           </Button>
         </DialogFooter>

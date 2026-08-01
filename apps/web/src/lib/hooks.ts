@@ -10,7 +10,11 @@ import type {
   CapacityResponse,
   CreateIssuesRequest,
   CreateJobRequest,
+  CreateLocationRequest,
+  CreatePoRequest,
   CreateReceiptRequest,
+  CreateWarehouseRequest,
+  CreateZoneRequest,
   InventorySummaryResponse,
   IssuePreviewResponse,
   Item,
@@ -18,6 +22,8 @@ import type {
   Job,
   JobListResponse,
   Kpi,
+  Location,
+  LocationListResponse,
   MovementListResponse,
   Notification,
   NotificationListResponse,
@@ -158,6 +164,18 @@ export function useReceipt(id: string | undefined) {
   });
 }
 
+export function useCreatePurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreatePoRequest) =>
+      apiPost<PurchaseOrder>("/api/purchase-orders", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+}
+
 export function useCreateReceipt() {
   const qc = useQueryClient();
   return useMutation({
@@ -170,6 +188,7 @@ export function useCreateReceipt() {
 }
 
 export function useInspectReceiptLine() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
       receiptId,
@@ -186,7 +205,10 @@ export function useInspectReceiptLine() {
         rejectedQty?: number;
       };
     }) =>
-      apiPost(`/api/receipts/${receiptId}/lines/${lineId}/inspect`, body)
+      apiPost(`/api/receipts/${receiptId}/lines/${lineId}/inspect`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["receipts"] });
+    }
   });
 }
 
@@ -253,6 +275,48 @@ export function useCreateItem() {
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     }
+  });
+}
+
+export function useCreateWarehouse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateWarehouseRequest) =>
+      apiPost<Warehouse>("/api/warehouses", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["warehouses"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+}
+
+export function useCreateZone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ warehouseId, body }: { warehouseId: string; body: CreateZoneRequest }) =>
+      apiPost(`/api/warehouses/${warehouseId}/zones`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["warehouses"] });
+    }
+  });
+}
+
+export function useCreateLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ warehouseId, body }: { warehouseId: string; body: CreateLocationRequest }) =>
+      apiPost<Location>(`/api/warehouses/${warehouseId}/locations`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["warehouses"] });
+      qc.invalidateQueries({ queryKey: ["locations"] });
+    }
+  });
+}
+
+export function useLocations() {
+  return useQuery({
+    queryKey: ["locations"],
+    queryFn: () => apiGet<LocationListResponse>("/api/locations")
   });
 }
 

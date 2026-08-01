@@ -37,6 +37,7 @@ export const receiptLineSchema = z.object({
   receivedQty: z.number(),
   acceptedQty: z.number(),
   rejectedQty: z.number(),
+  inspectionResult: inspectionResultSchema.nullable(),
   status: receiptStatusSchema
 });
 

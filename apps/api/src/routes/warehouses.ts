@@ -9,6 +9,7 @@ import {
 import {
   createWarehouseRequestSchema,
   warehouseListParamsSchema,
+  createZoneRequestSchema,
   createLocationRequestSchema
 } from "@forgeflow/contracts";
 import { getDb } from "../db";
@@ -101,6 +102,40 @@ warehouseRoutes.get("/warehouses/:id", async (c) => {
   return c.json(row);
 });
 
+warehouseRoutes.post(
+  "/warehouses/:id/zones",
+  requireWriteRole("manager", "admin"),
+  validate(createZoneRequestSchema),
+  async (c) => {
+    const db: ForgeDb = getDb(c.env);
+    const id = c.req.param("id");
+    const input = c.req.valid("json");
+
+    const wh = await db.select().from(warehouse).where(eq(warehouse.id, id)).get();
+    if (!wh) notFound("Warehouse not found");
+
+    const dup = await db
+      .select()
+      .from(zone)
+      .where(and(eq(zone.warehouseId, id), eq(zone.code, input.code)))
+      .get();
+    if (dup) badRequest("Zone code already exists in this warehouse", { field: "code" });
+
+    const zoneId = crypto.randomUUID();
+    await db.insert(zone).values({
+      id: zoneId,
+      warehouseId: id,
+      code: input.code,
+      name: input.name,
+      type: input.type,
+      status: input.status
+    });
+
+    const created = await db.select().from(zone).where(eq(zone.id, zoneId)).get();
+    return c.json(created, 201);
+  }
+);
+
 warehouseRoutes.get("/warehouses/:id/locations", async (c) => {
   const db: ForgeDb = getDb(c.env);
   const id = c.req.param("id");
@@ -123,8 +158,10 @@ warehouseRoutes.post(
   validate(createLocationRequestSchema),
   async (c) => {
     const db: ForgeDb = getDb(c.env);
+    const whId = c.req.param("id");
     const input = c.req.valid("json");
-    const id = crypto.randomUUID();
+
+    if (input.warehouseId !== whId) badRequest("warehouseId does not match the warehouse", { field: "warehouseId" });
 
     const zoneRow = await db
       .select()
@@ -132,6 +169,7 @@ warehouseRoutes.post(
       .where(eq(zone.id, input.zoneId))
       .get();
     if (!zoneRow) badRequest("Zone not found", { field: "zoneId" });
+    if (zoneRow.warehouseId !== whId) badRequest("Zone does not belong to this warehouse", { field: "zoneId" });
 
     const loc = await db
       .select()
@@ -140,9 +178,10 @@ warehouseRoutes.post(
       .get();
     if (loc) badRequest("Location code already exists", { field: "code" });
 
+    const newId = crypto.randomUUID();
     await db.insert(location).values({
-      id,
-      warehouseId: input.warehouseId,
+      id: newId,
+      warehouseId: whId,
       zoneId: input.zoneId,
       code: input.code,
       locationType: input.locationType,
@@ -150,7 +189,31 @@ warehouseRoutes.post(
       status: input.status
     });
 
-    const created = await db.select().from(location).where(eq(location.id, id)).get();
+    const created = await db.select().from(location).where(eq(location.id, newId)).get();
     return c.json(created, 201);
   }
 );
+
+warehouseRoutes.get("/locations", async (c) => {
+  const db: ForgeDb = getDb(c.env);
+  const rows = await db
+    .select({
+      id: location.id,
+      warehouseId: location.warehouseId,
+      zoneId: location.zoneId,
+      code: location.code,
+      locationType: location.locationType,
+      capacityQty: location.capacityQty,
+      status: location.status,
+      warehouseCode: warehouse.code,
+      warehouseName: warehouse.name,
+      zoneCode: zone.code,
+      zoneName: zone.name
+    })
+    .from(location)
+    .innerJoin(warehouse, eq(location.warehouseId, warehouse.id))
+    .innerJoin(zone, eq(location.zoneId, zone.id))
+    .orderBy(asc(location.code));
+
+  return c.json({ items: rows });
+});

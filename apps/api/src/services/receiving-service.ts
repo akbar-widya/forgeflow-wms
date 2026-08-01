@@ -47,6 +47,12 @@ export async function buildReceiptLineDto(
         .get()
     : undefined;
 
+  const qi = await db
+    .select()
+    .from(qualityInspection)
+    .where(eq(qualityInspection.receiptLineId, line.id))
+    .get();
+
   return {
     id: line.id,
     receiptId: line.receiptId,
@@ -61,6 +67,7 @@ export async function buildReceiptLineDto(
     receivedQty: line.receivedQty,
     acceptedQty: line.acceptedQty,
     rejectedQty: line.rejectedQty,
+    inspectionResult: qi?.result ?? null,
     status: line.status
   };
 }
