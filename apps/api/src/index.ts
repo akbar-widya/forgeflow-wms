@@ -13,6 +13,7 @@ import { receivingRoutes } from "./routes/receiving";
 import { jobRoutes } from "./routes/jobs";
 import { movementRoutes } from "./routes/movements";
 import { notificationRoutes } from "./routes/notifications";
+import { seedRoutes } from "./routes/seed";
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
 
@@ -38,6 +39,7 @@ app.route("/api", receivingRoutes);
 app.route("/api", jobRoutes);
 app.route("/api", movementRoutes);
 app.route("/api", notificationRoutes);
+app.route("/api", seedRoutes);
 
 app.notFound((c) =>
   c.json(

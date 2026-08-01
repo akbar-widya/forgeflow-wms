@@ -1,11 +1,19 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Boxes, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Boxes, Eye, EyeOff, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { apiPost } from "@/lib/api-client";
+
+const DEMO_ACCOUNTS = [
+  { label: "Admin", email: "admin@forgeflow.io", password: "admin123", color: "text-danger" },
+  { label: "Manager", email: "manager@forgeflow.io", password: "manager123", color: "text-warning" },
+  { label: "Operator", email: "operator@forgeflow.io", password: "operator123", color: "text-success" },
+  { label: "Auditor", email: "auditor@forgeflow.io", password: "auditor123", color: "text-info" }
+] as const;
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -15,6 +23,8 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seeded, setSeeded] = useState(false);
 
   const from = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/dashboard";
 
@@ -29,6 +39,51 @@ export function LoginPage() {
         return;
       }
       toast.success("Signed in");
+      navigate(from, { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSeed() {
+    setSeeding(true);
+    setError(null);
+    try {
+      await apiPost("/api/seed", {});
+      setSeeded(true);
+      toast.success("Demo accounts created");
+    } catch {
+      setError("Failed to seed demo data");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  async function handleQuickLogin(d: (typeof DEMO_ACCOUNTS)[number]) {
+    if (!seeded) {
+      setSeeding(true);
+      setError(null);
+      try {
+        await apiPost("/api/seed", {});
+        setSeeded(true);
+      } catch {
+        setError("Failed to seed demo data");
+        setSeeding(false);
+        return;
+      }
+      setSeeding(false);
+    }
+    setEmail(d.email);
+    setPassword(d.password);
+    setError(null);
+    setLoading(true);
+    try {
+      const { error: signInError } = await authClient.signIn.email({ email: d.email, password: d.password });
+      if (signInError) {
+        setError(`Invalid credentials for ${d.label}`);
+        return;
+      }
+      toast.success(`Signed in as ${d.label}`);
       navigate(from, { replace: true });
     } finally {
       setLoading(false);
@@ -147,6 +202,46 @@ export function LoginPage() {
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Quick Demo Login
+              </span>
+              {!seeded && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSeed}
+                  disabled={seeding}
+                  className="h-6 px-2 text-[11px]"
+                >
+                  {seeding ? (
+                    <Loader2 className="size-3 animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Zap className="size-3" data-icon="inline-start" />
+                  )}
+                  {seeding ? "Seeding..." : "Init DB"}
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {DEMO_ACCOUNTS.map((d) => (
+                <button
+                  key={d.email}
+                  type="button"
+                  onClick={() => handleQuickLogin(d)}
+                  disabled={loading || seeding}
+                  className="flex items-center gap-2 rounded-[4px] border border-border px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50 disabled:opacity-50"
+                >
+                  <span className={`font-mono text-[10px] font-bold ${d.color}`}>
+                    {d.label.slice(0, 3).toUpperCase()}
+                  </span>
+                  <span className="truncate text-muted-foreground">{d.email.split("@")[0]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-6 border-t border-border pt-4 text-center text-xs text-muted-foreground">
             Authorized personnel only. All activity is logged.

@@ -8,7 +8,13 @@ import { unauthorized } from "../lib/http";
 import type { WorkerEnv } from "../env";
 import type { AppEnv } from "../types";
 
+const PUBLIC_PATHS = ["/api/seed", "/api/seed/status"];
+
 export const authRequired = createMiddleware<AppEnv>(async (c, next) => {
+  if (PUBLIC_PATHS.includes(new URL(c.req.url).pathname)) {
+    return next();
+  }
+
   const env = c.env;
   const auth = getAuth(env);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
