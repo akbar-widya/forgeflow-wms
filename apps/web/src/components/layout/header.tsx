@@ -1,7 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
 import { LogOut, User } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api-client";
+import { authClient } from "@/lib/auth-client";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,8 @@ function initials(name: string): string {
 
 export function Header() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { setUnauthenticated } = useAuthStore();
   const { data } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiGet<MeResponse>("/api/me"),
@@ -46,9 +50,14 @@ export function Header() {
   const employeeCode = user?.staffProfile?.employeeCode ?? "";
 
   async function handleLogout() {
-    await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
-    navigate("/login");
-    window.location.reload();
+    try {
+      await authClient.signOut();
+    } catch {
+      // still clear local session even if the server call fails
+    }
+    setUnauthenticated();
+    queryClient.clear();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -89,7 +98,7 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/dashboard">
+              <Link to="/profile">
                 <User data-icon="inline-start" />
                 Profile
               </Link>
