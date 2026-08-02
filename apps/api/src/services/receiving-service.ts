@@ -569,7 +569,7 @@ export async function batchPostReceipts(
             performedBy: staffId,
             occurredAt: now
           },
-          existing
+          existing ?? undefined
         );
         stmts.push(bundle.movementStmt, bundle.balanceStmt);
         movementCount += 1;
