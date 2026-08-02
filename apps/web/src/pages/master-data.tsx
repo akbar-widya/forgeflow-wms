@@ -12,7 +12,8 @@ import {
   useItems,
   useLocations,
   useWarehouseLocations,
-  useWarehouses
+  useWarehouses,
+  useZones
 } from "@/lib/hooks";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,12 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
 import { formatDate, formatNumber } from "@/lib/utils";
 
 const warehouseSchema = z.object({
@@ -717,6 +724,55 @@ function LocationForm() {
   );
 }
 
+function ZonesTable() {
+  const { data, isLoading } = useZones();
+  const rows = data?.items ?? [];
+
+  return (
+    <Card className="rounded-none border-border shadow-none">
+      <CardHeader>
+        <CardTitle className="text-base">Zones</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="max-h-[360px] overflow-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Warehouse</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((zone) => (
+                <tr key={zone.id}>
+                  <td className="font-mono text-xs">{zone.code}</td>
+                  <td className="font-medium">{zone.name}</td>
+                  <td className="text-xs uppercase">{zone.type}</td>
+                  <td className="font-medium">{zone.warehouseCode}</td>
+                  <td>{statusBadge(zone.status)}</td>
+                </tr>
+              ))}
+              {!isLoading && rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No zones yet. Create one above.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LocationsTable() {
   const { data, isLoading } = useLocations();
   const rows = data?.items ?? [];
@@ -770,11 +826,10 @@ function LocationsTable() {
   );
 }
 
-export function MasterDataPage() {
+function WarehousesSection() {
   const { data: warehouses, isLoading: whLoading } = useWarehouses({
     pageSize: 100
   });
-  const { data: items, isLoading: itemsLoading } = useItems({ pageSize: 100 });
 
   const warehouseRows = useMemo(
     () =>
@@ -789,47 +844,22 @@ export function MasterDataPage() {
   );
 
   return (
-    <div>
-      <PageHeader
-        title="Master data"
-        description="Register warehouses and items that power receiving, jobs and movements"
-      />
+    <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <Card className="rounded-none border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">New warehouse</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WarehouseForm />
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <Card className="rounded-none border-border shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">New warehouse</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <WarehouseForm />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-none border-border shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">New zone</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ZoneForm />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-none border-border shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">New location</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LocationForm />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="rounded-none border-border shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">Warehouses</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+      <Card className="rounded-none border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">Warehouses</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[440px] overflow-auto">
             <table className="data-table">
               <thead>
                 <tr>
@@ -862,57 +892,128 @@ export function MasterDataPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ItemsSection() {
+  const { data: items, isLoading: itemsLoading } = useItems({ pageSize: 100 });
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <Card className="rounded-none border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">New item</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ItemForm />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-none border-border shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">Items</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[440px] overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Name</th>
+                  <th>UoM</th>
+                  <th>Lot</th>
+                  <th>Exp</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(items?.items ?? []).map((item) => (
+                  <tr key={item.id}>
+                    <td className="font-mono text-xs">{item.sku}</td>
+                    <td className="font-medium">{item.name}</td>
+                    <td className="font-mono text-xs">{item.uom}</td>
+                    <td>{item.lotTracked ? "Yes" : "—"}</td>
+                    <td>{item.expiryTracked ? "Yes" : "—"}</td>
+                    <td>{statusBadge(item.status)}</td>
+                  </tr>
+                ))}
+                {!itemsLoading && (items?.items ?? []).length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="py-8 text-center text-sm text-muted-foreground"
+                    >
+                      No items yet. Create one above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LocationsSection() {
+  return (
+    <div className="mt-4 space-y-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card className="rounded-none border-border shadow-none">
+          <CardHeader>
+            <CardTitle className="text-base">New zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ZoneForm />
           </CardContent>
         </Card>
 
         <Card className="rounded-none border-border shadow-none">
           <CardHeader>
-            <CardTitle className="text-base">Items</CardTitle>
+            <CardTitle className="text-base">New location</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[360px] overflow-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Name</th>
-                    <th>UoM</th>
-                    <th>Lot</th>
-                    <th>Exp</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(items?.items ?? []).map((item) => (
-                    <tr key={item.id}>
-                      <td className="font-mono text-xs">{item.sku}</td>
-                      <td className="font-medium">{item.name}</td>
-                      <td className="font-mono text-xs">{item.uom}</td>
-                      <td>{item.lotTracked ? "Yes" : "—"}</td>
-                      <td>{item.expiryTracked ? "Yes" : "—"}</td>
-                      <td>{statusBadge(item.status)}</td>
-                    </tr>
-                  ))}
-                  {!itemsLoading && (items?.items ?? []).length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="py-8 text-center text-sm text-muted-foreground"
-                      >
-                        No items yet. Create one above.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <CardContent>
+            <LocationForm />
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ZonesTable />
         <LocationsTable />
       </div>
+    </div>
+  );
+}
+
+export function MasterDataPage() {
+  return (
+    <div>
+      <PageHeader
+        title="Master data"
+        description="Register warehouses, items and locations that power receiving, jobs and movements"
+      />
+      <Tabs defaultValue="warehouses">
+        <TabsList variant="line">
+          <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+          <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="locations">Locations</TabsTrigger>
+        </TabsList>
+        <TabsContent value="warehouses">
+          <WarehousesSection />
+        </TabsContent>
+        <TabsContent value="items">
+          <ItemsSection />
+        </TabsContent>
+        <TabsContent value="locations">
+          <LocationsSection />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

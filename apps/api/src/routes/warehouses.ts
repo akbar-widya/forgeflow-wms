@@ -136,6 +136,26 @@ warehouseRoutes.post(
   }
 );
 
+warehouseRoutes.get("/zones", async (c) => {
+  const db: ForgeDb = getDb(c.env);
+  const rows = await db
+    .select({
+      id: zone.id,
+      warehouseId: zone.warehouseId,
+      code: zone.code,
+      name: zone.name,
+      type: zone.type,
+      status: zone.status,
+      warehouseCode: warehouse.code,
+      warehouseName: warehouse.name
+    })
+    .from(zone)
+    .innerJoin(warehouse, eq(zone.warehouseId, warehouse.id))
+    .orderBy(asc(warehouse.code), asc(zone.code));
+
+  return c.json({ items: rows });
+});
+
 warehouseRoutes.get("/warehouses/:id/locations", async (c) => {
   const db: ForgeDb = getDb(c.env);
   const id = c.req.param("id");

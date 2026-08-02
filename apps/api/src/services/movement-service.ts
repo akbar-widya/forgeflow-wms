@@ -1,4 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
+import { type BatchItem } from "drizzle-orm/batch";
 import {
   stockBalance,
   stockMovement,
@@ -63,15 +64,22 @@ async function findBalance(
     .get();
 }
 
+export type MovementStatementBundle = {
+  movementId: string;
+  movementStmt: BatchItem<"sqlite">;
+  balanceStmt: BatchItem<"sqlite">;
+};
+
 /**
- * Apply a movement that adjusts a single stock balance row.
- * Inserts the immutable ledger row and updates the balance in one D1 batch.
+ * Prepare the ledger + balance statements for a single-location movement without
+ * executing them. Callers can batch multiple bundles together atomically.
  */
-export async function applySingleLocationMovement(
-  cmd: MovementCommand
-): Promise<string> {
+export function buildSingleLocationMovementStatements(
+  db: ForgeDb,
+  cmd: Omit<MovementCommand, "db">,
+  existing?: typeof stockBalance.$inferSelect
+): MovementStatementBundle {
   const {
-    db,
     warehouseId,
     itemId,
     lotId,
@@ -92,14 +100,6 @@ export async function applySingleLocationMovement(
 
   const now = occurredAt ?? Date.now();
   const movementId = crypto.randomUUID();
-
-  const existing = await findBalance(
-    db,
-    warehouseId,
-    resolvedLocation,
-    itemId,
-    lotId
-  );
 
   let newOnHand: number;
   let stockStatus: StockStatus;
@@ -141,9 +141,10 @@ export async function applySingleLocationMovement(
     occurredAt: nowMs
   };
 
-  await db.batch([
-    db.insert(stockMovement).values(movement),
-    existing
+  return {
+    movementId,
+    movementStmt: db.insert(stockMovement).values(movement),
+    balanceStmt: existing
       ? db
           .update(stockBalance)
           .set({
@@ -165,7 +166,37 @@ export async function applySingleLocationMovement(
           stockStatus,
           updatedAt: nowMs
         })
-  ]);
+  };
+}
+
+/**
+ * Apply a movement that adjusts a single stock balance row.
+ * Inserts the immutable ledger row and updates the balance in one D1 batch.
+ */
+export async function applySingleLocationMovement(
+  cmd: MovementCommand
+): Promise<string> {
+  const { db, ...rest } = cmd;
+
+  const resolvedLocation =
+    rest.locationId ?? rest.toLocationId ?? rest.fromLocationId;
+
+  if (resolvedLocation == null) {
+    badRequest("location is required for this movement");
+  }
+
+  const existing = await findBalance(
+    db,
+    rest.warehouseId,
+    resolvedLocation,
+    rest.itemId,
+    rest.lotId
+  );
+
+  const { movementId, movementStmt, balanceStmt } =
+    buildSingleLocationMovementStatements(db, rest, existing);
+
+  await db.batch([movementStmt, balanceStmt]);
 
   return movementId;
 }

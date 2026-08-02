@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { FilePlus, PackagePlus, Plus } from "lucide-react";
+import { FilePlus, PackagePlus, Plus, Trash2 } from "lucide-react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
+  useBatchPostReceipts,
   useCreatePurchaseOrder,
-  useCreateReceipt,
-  useInspectReceiptLine,
   useItems,
-  usePostReceipt,
   usePurchaseOrders,
-  useReceipt,
   useWarehouseLocations,
   useWarehouses
 } from "@/lib/hooks";
@@ -81,6 +77,23 @@ type ReceiptLineDraft = {
   lotCode: string;
   targetLocationId: string;
 };
+
+type StagedLine = ReceiptLineDraft & {
+  id: string;
+  purchaseOrderId: string;
+  poNumber: string;
+  supplierName: string;
+  warehouseId: string;
+  warehouseCode: string;
+  targetLocationCode: string;
+  inspectionResult: "accepted" | "rejected" | "quarantined";
+  acceptedQty: number;
+  discrepancyCode: string;
+};
+
+function genId() {
+  return crypto.randomUUID();
+}
 
 function CreatePoDialog({
   open,
@@ -273,14 +286,18 @@ function CreatePoDialog({
 function CreateReceiptDialog({
   open,
   onOpenChange,
-  initialPoId
+  initialPoId,
+  onAdd
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialPoId?: string | null;
+  onAdd: (lines: StagedLine[]) => void;
 }) {
-  const { data: pos } = usePurchaseOrders({ status: "open", pageSize: 100 });
-  const openPos = pos?.items ?? [];
+  const { data: pos } = usePurchaseOrders({ pageSize: 100 });
+  const openPos = (pos?.items ?? []).filter(
+    (p) => p.status === "open" || p.status === "partially_received"
+  );
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
   const selectedPo = useMemo(
     () => openPos.find((p) => p.id === selectedPoId),
@@ -291,8 +308,6 @@ function CreateReceiptDialog({
   const locations = whLocations?.locations ?? [];
 
   const [drafts, setDrafts] = useState<Record<string, ReceiptLineDraft>>({});
-  const createReceipt = useCreateReceipt();
-  const [submitting, setSubmitting] = useState(false);
   const preselected = useRef(false);
 
   function handleSelectPo(poId: string) {
@@ -333,7 +348,7 @@ function CreateReceiptDialog({
     setDrafts({});
   }
 
-  async function handleCreate() {
+  function handleAdd() {
     if (!selectedPo) return;
     const lines = Object.values(drafts).filter((d) => d.receivedQty > 0);
     if (lines.length === 0) {
@@ -345,39 +360,47 @@ function CreateReceiptDialog({
       toast.error("Every line needs a target location");
       return;
     }
-    setSubmitting(true);
-    try {
-      const receipt = await createReceipt.mutateAsync({
-        warehouseId: selectedPo.warehouseId,
-        purchaseOrderId: selectedPo.id,
-        lines: lines.map((l) => ({
-          purchaseOrderLineId: l.purchaseOrderLineId,
-          itemId: l.itemId,
-          lotCode: l.lotCode || undefined,
-          targetLocationId: l.targetLocationId,
-          receivedQty: l.receivedQty
-        }))
-      });
-      toast.success(`Receipt ${receipt.receiptNumber} created`);
-      onOpenChange(false);
-      reset();
-      window.dispatchEvent(
-        new CustomEvent("receipt:created", { detail: receipt.id })
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create receipt");
-    } finally {
-      setSubmitting(false);
-    }
+    const locById = new Map(locations.map((loc) => [loc.id, loc]));
+    const staged: StagedLine[] = lines.map((l) => ({
+      id: genId(),
+      purchaseOrderLineId: l.purchaseOrderLineId,
+      itemId: l.itemId,
+      sku: l.sku,
+      itemName: l.itemName,
+      receivedQty: l.receivedQty,
+      lotCode: l.lotCode,
+      targetLocationId: l.targetLocationId,
+      targetLocationCode: locById.get(l.targetLocationId)?.code ?? "",
+      purchaseOrderId: selectedPo.id,
+      poNumber: selectedPo.poNumber,
+      supplierName: selectedPo.supplierName,
+      warehouseId: selectedPo.warehouseId,
+      warehouseCode: selectedPo.warehouseCode,
+      inspectionResult: "accepted",
+      acceptedQty: l.receivedQty,
+      discrepancyCode: ""
+    }));
+    onAdd(staged);
+    toast.success(`Added ${staged.length} line(s) to the active receipt`);
+    setDrafts((d) => {
+      const next = { ...d };
+      for (const id of staged.map((s) => s.purchaseOrderLineId)) {
+        if (next[id]) {
+          next[id] = { ...next[id], receivedQty: 0, lotCode: "" };
+        }
+      }
+      return next;
+    });
   }
 
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create receipt</DialogTitle>
+          <DialogTitle>Receive stock</DialogTitle>
           <DialogDescription>
-            Register inbound stock against an open purchase order.
+            Add lines to the active receipt staging list. They are posted to
+            stock together from the Active receipt tab.
           </DialogDescription>
         </DialogHeader>
 
@@ -396,7 +419,7 @@ function CreateReceiptDialog({
                 ))}
                 {openPos.length === 0 && (
                   <SelectItem value="__none" disabled>
-                    No open POs — create one first
+                    No open or partial POs — create one first
                   </SelectItem>
                 )}
               </SelectContent>
@@ -496,11 +519,11 @@ function CreateReceiptDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            Close
           </Button>
-          <Button onClick={handleCreate} disabled={submitting || !selectedPo}>
+          <Button onClick={handleAdd} disabled={!selectedPo}>
             <PackagePlus data-icon="inline-start" />
-            {submitting ? "Creating..." : "Create receipt"}
+            Add to receipt
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -508,186 +531,175 @@ function CreateReceiptDialog({
   );
 }
 
-function ReceiptDetail({ receiptId }: { receiptId: string }) {
-  const { data: receipt } = useReceipt(receiptId);
-  const postReceipt = usePostReceipt();
-
-  if (!receipt) return null;
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <CardTitle className="text-base">{receipt.receiptNumber}</CardTitle>
-            <div className="text-xs text-muted-foreground">
-              PO {receipt.poNumber ?? "—"} · {receipt.warehouseCode || receipt.warehouseId}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge kind="receipt" value={receipt.status} />
-          {receipt.status === "inspecting" && (
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  await postReceipt.mutateAsync(receiptId);
-                  toast.success("Receipt posted — stock updated");
-                } catch (err) {
-                  toast.error(
-                    err instanceof Error ? err.message : "Failed to post receipt"
-                  );
-                }
-              }}
-              disabled={postReceipt.isPending}
-            >
-              Post receipt
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Item</th>
-              <th>Lot</th>
-              <th className="text-right">Received</th>
-              <th className="text-right">Accepted</th>
-              <th className="text-right">Rejected</th>
-              <th>Target</th>
-              <th>Inspection</th>
-              <th className="text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {receipt.lines.map((line) => (
-              <ReceiptLineRow key={line.id} receiptId={receiptId} line={line} />
-            ))}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ReceiptLineRow({
-  receiptId,
-  line
+function ActiveLineRow({
+  line,
+  onChange,
+  onRemove
 }: {
-  receiptId: string;
-  line: {
-    id: string;
-    sku: string;
-    itemName: string;
-    lotCode: string | null;
-    receivedQty: number;
-    acceptedQty: number;
-    rejectedQty: number;
-    inspectionResult: string | null;
-    targetLocationCode: string | null;
-  };
+  line: StagedLine;
+  onChange: (id: string, patch: Partial<StagedLine>) => void;
+  onRemove: (id: string) => void;
 }) {
-  const inspect = useInspectReceiptLine();
-  const [result, setResult] = useState<"accepted" | "rejected" | "quarantined">("accepted");
-  const [acceptedQty, setAcceptedQty] = useState<number>(line.receivedQty);
-  const [discrepancyCode, setDiscrepancyCode] = useState("damaged");
-  const [busy, setBusy] = useState(false);
-
-  const inspected = line.inspectionResult !== null && line.inspectionResult !== "pending";
-  const needsDiscrepancy = result !== "accepted";
-
-  async function record() {
-    setBusy(true);
-    try {
-      const rejectedQty =
-        result === "quarantined"
-          ? line.receivedQty
-          : line.receivedQty - acceptedQty;
-      await inspect.mutateAsync({
-        receiptId,
-        lineId: line.id,
-        body: {
-          result,
-          acceptedQty: result === "accepted" || result === "rejected" ? acceptedQty : 0,
-          rejectedQty,
-          discrepancyCode: needsDiscrepancy ? discrepancyCode : undefined
-        }
-      });
-      toast.success("Inspection recorded");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Inspection failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const needsDiscrepancy = line.inspectionResult !== "accepted";
 
   return (
     <tr>
+      <td className="font-mono text-xs">{line.poNumber}</td>
       <td className="font-mono text-xs">{line.sku}</td>
       <td className="font-medium">{line.itemName}</td>
       <td className="font-mono text-xs">{line.lotCode || "—"}</td>
       <td className="text-right font-mono">{formatNumber(line.receivedQty)}</td>
-      <td className="text-right font-mono">{formatNumber(line.acceptedQty)}</td>
-      <td className="text-right font-mono">{formatNumber(line.rejectedQty)}</td>
-      <td className="font-mono text-xs">{line.targetLocationCode || "—"}</td>
       <td>
-        {inspected ? (
-          <StatusBadge kind="inspection" value={line.inspectionResult ?? "pending"} />
-        ) : (
-          <StatusBadge kind="inspection" value="pending" />
-        )}
+        <Input
+          type="number"
+          min={0}
+          max={line.receivedQty}
+          className="h-7 w-20 text-xs"
+          value={line.acceptedQty}
+          onChange={(e) => onChange(line.id, { acceptedQty: Number(e.target.value) })}
+        />
       </td>
-      <td className="text-right">
-        {!inspected ? (
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center justify-end gap-2">
-              <Select value={result} onValueChange={(v) => setResult(v as typeof result)}>
-                <SelectTrigger className="h-7 w-[120px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="accepted">Accept</SelectItem>
-                  <SelectItem value="rejected">Reject</SelectItem>
-                  <SelectItem value="quarantined">Quarantine</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                min={0}
-                max={line.receivedQty}
-                className="h-7 w-20 text-xs"
-                value={acceptedQty}
-                onChange={(e) => setAcceptedQty(Number(e.target.value))}
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              {needsDiscrepancy && (
-                <Select value={discrepancyCode} onValueChange={setDiscrepancyCode}>
-                  <SelectTrigger className="h-7 w-[140px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DISCREPANCIES.map((d) => (
-                      <SelectItem key={d.value} value={d.value}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Button size="xs" variant="outline" disabled={busy} onClick={record}>
-                Record
-              </Button>
-            </div>
-          </div>
+      <td>
+        <Select
+          value={line.inspectionResult}
+          onValueChange={(v) =>
+            onChange(line.id, {
+              inspectionResult: v as StagedLine["inspectionResult"],
+              acceptedQty:
+                v === "accepted"
+                  ? line.receivedQty
+                  : v === "quarantined"
+                    ? 0
+                    : line.acceptedQty
+            })
+          }
+        >
+          <SelectTrigger className="h-7 w-[120px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="accepted">Accept</SelectItem>
+            <SelectItem value="rejected">Reject</SelectItem>
+            <SelectItem value="quarantined">Quarantine</SelectItem>
+          </SelectContent>
+        </Select>
+      </td>
+      <td>
+        {needsDiscrepancy ? (
+          <Select
+            value={line.discrepancyCode || "damaged"}
+            onValueChange={(v) => onChange(line.id, { discrepancyCode: v })}
+          >
+            <SelectTrigger className="h-7 w-[140px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DISCREPANCIES.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
+      <td className="font-mono text-xs">{line.targetLocationCode || "—"}</td>
+      <td className="text-right">
+        <Button size="icon" variant="ghost" onClick={() => onRemove(line.id)}>
+          <Trash2 className="size-4" />
+        </Button>
+      </td>
     </tr>
+  );
+}
+
+function ActiveReceiptPanel({
+  staged,
+  onChange,
+  onRemove,
+  onPostAll,
+  posting
+}: {
+  staged: StagedLine[];
+  onChange: (id: string, patch: Partial<StagedLine>) => void;
+  onRemove: (id: string) => void;
+  onPostAll: () => void;
+  posting: boolean;
+}) {
+  const totalQty = staged.reduce((sum, l) => sum + l.receivedQty, 0);
+  const invalid = staged.some(
+    (l) =>
+      !l.targetLocationId ||
+      !Number.isFinite(l.acceptedQty) ||
+      l.acceptedQty < 0 ||
+      l.acceptedQty > l.receivedQty
+  );
+
+  if (staged.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            No staged receipts. Use "New receipt" to add received items.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {staged.length} staged line(s) · {formatNumber(totalQty)} units ·
+          posted to stock together
+        </p>
+        <Button onClick={onPostAll} disabled={posting || invalid}>
+          <PackagePlus data-icon="inline-start" />
+          {posting ? "Posting..." : "Post/Record Receipts"}
+        </Button>
+      </div>
+      {invalid && (
+        <p className="text-xs text-danger">
+          Review accepted quantities — each must be between 0 and the received
+          quantity.
+        </p>
+      )}
+      <Card>
+        <CardContent className="p-0">
+          <div className="max-h-[480px] overflow-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>PO</th>
+                  <th>SKU</th>
+                  <th>Item</th>
+                  <th>Lot</th>
+                  <th className="text-right">Received</th>
+                  <th className="text-right">Accepted</th>
+                  <th>Result</th>
+                  <th>Discrepancy</th>
+                  <th>Target</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staged.map((line) => (
+                  <ActiveLineRow
+                    key={line.id}
+                    line={line}
+                    onChange={onChange}
+                    onRemove={onRemove}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -769,19 +781,11 @@ export function ReceivingPage() {
   const [createReceiptOpen, setCreateReceiptOpen] = useState(false);
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
-  const [activeReceiptId, setActiveReceiptId] = useState<string | null>(null);
-  const { receiptId } = useParams();
+  const [staged, setStaged] = useState<StagedLine[]>([]);
+  const batchPost = useBatchPostReceipts();
 
   const { data: pos } = usePurchaseOrders({ pageSize: 100 });
 
-  useEffect(() => {
-    const handler = ((e: CustomEvent) =>
-      setActiveReceiptId(e.detail)) as EventListener;
-    window.addEventListener("receipt:created", handler);
-    return () => window.removeEventListener("receipt:created", handler);
-  }, []);
-
-  const effectiveReceiptId = receiptId ?? activeReceiptId;
   const selectedPo = useMemo(
     () => pos?.items.find((p) => p.id === selectedPoId) ?? null,
     [pos, selectedPoId]
@@ -790,6 +794,56 @@ export function ReceivingPage() {
   function openReceive(poId: string) {
     setReceivePoId(poId);
     setCreateReceiptOpen(true);
+  }
+
+  function handleAddLines(lines: StagedLine[]) {
+    setStaged((prev) => [...prev, ...lines]);
+  }
+
+  function handleUpdateLine(id: string, patch: Partial<StagedLine>) {
+    setStaged((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  }
+
+  function handleRemoveLine(id: string) {
+    setStaged((prev) => prev.filter((l) => l.id !== id));
+  }
+
+  async function handlePostAll() {
+    if (staged.length === 0) return;
+    const byPo = new Map<string, StagedLine[]>();
+    for (const line of staged) {
+      const list = byPo.get(line.purchaseOrderId) ?? [];
+      list.push(line);
+      byPo.set(line.purchaseOrderId, list);
+    }
+    try {
+      const result = await batchPost.mutateAsync({
+        receipts: Array.from(byPo.values()).map((lines) => ({
+          warehouseId: lines[0].warehouseId,
+          purchaseOrderId: lines[0].purchaseOrderId,
+          lines: lines.map((l) => ({
+            purchaseOrderLineId: l.purchaseOrderLineId,
+            itemId: l.itemId,
+            lotCode: l.lotCode || undefined,
+            targetLocationId: l.targetLocationId,
+            receivedQty: l.receivedQty,
+            inspectionResult: l.inspectionResult,
+            acceptedQty: l.acceptedQty,
+            rejectedQty: l.receivedQty - l.acceptedQty,
+            discrepancyCode:
+              l.inspectionResult === "accepted"
+                ? undefined
+                : l.discrepancyCode || undefined
+          }))
+        }))
+      });
+      toast.success(
+        `Posted ${result.movementCount} movement(s) across ${result.receipts.length} receipt(s)`
+      );
+      setStaged([]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to post receipts");
+    }
   }
 
   return (
@@ -821,8 +875,8 @@ export function ReceivingPage() {
           <TabsTrigger value="po-detail" disabled={!selectedPoId}>
             PO detail
           </TabsTrigger>
-          <TabsTrigger value="receipt" disabled={!effectiveReceiptId}>
-            Active receipt
+          <TabsTrigger value="receipt" disabled={staged.length === 0}>
+            Active receipt ({staged.length})
           </TabsTrigger>
         </TabsList>
 
@@ -900,7 +954,13 @@ export function ReceivingPage() {
         </TabsContent>
 
         <TabsContent value="receipt" className="mt-4">
-          {effectiveReceiptId && <ReceiptDetail receiptId={effectiveReceiptId} />}
+          <ActiveReceiptPanel
+            staged={staged}
+            onChange={handleUpdateLine}
+            onRemove={handleRemoveLine}
+            onPostAll={handlePostAll}
+            posting={batchPost.isPending}
+          />
         </TabsContent>
       </Tabs>
 
@@ -909,6 +969,7 @@ export function ReceivingPage() {
         open={createReceiptOpen}
         onOpenChange={setCreateReceiptOpen}
         initialPoId={receivePoId}
+        onAdd={handleAddLines}
       />
     </div>
   );

@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { type BatchItem } from "drizzle-orm/batch";
 import {
   receipt,
   receiptLine,
@@ -8,9 +9,12 @@ import {
   location,
   item,
   itemLot,
+  stockBalance,
   type ForgeDb
 } from "@forgeflow/db";
 import type {
+  BatchPostReceiptsRequest,
+  BatchPostReceiptsResponse,
   CreateReceiptRequest,
   InspectReceiptLineRequest,
   Receipt,
@@ -19,6 +23,7 @@ import type {
 import { badRequest, conflict, notFound } from "../lib/http";
 import {
   applySingleLocationMovement,
+  buildSingleLocationMovementStatements,
   ensureLot
 } from "./movement-service";
 import { createNotification } from "./notification-service";
@@ -348,4 +353,255 @@ export async function postReceipt(
   }
 
   return buildReceiptDto(db, receiptId);
+}
+
+export async function batchPostReceipts(
+  db: ForgeDb,
+  input: BatchPostReceiptsRequest,
+  staffId: string
+): Promise<BatchPostReceiptsResponse> {
+  const now = Date.now();
+
+  const locationIds = new Set<string>();
+  for (const r of input.receipts) {
+    for (const l of r.lines) {
+      if (l.acceptedQty + l.rejectedQty > l.receivedQty) {
+        badRequest("Accepted + rejected cannot exceed received quantity", {
+          itemId: l.itemId
+        });
+      }
+      locationIds.add(l.targetLocationId);
+    }
+  }
+
+  const poIds = input.receipts.map((r) => r.purchaseOrderId);
+
+  const locs = await db
+    .select()
+    .from(location)
+    .where(inArray(location.id, [...locationIds]));
+  const locById = new Map(locs.map((loc) => [loc.id, loc]));
+  for (const id of locationIds) {
+    const loc = locById.get(id);
+    if (!loc) badRequest("Target location not found", { locationId: id });
+    if (loc!.status !== "active") {
+      conflict("Target location is not active", { locationId: id });
+    }
+  }
+
+  const pos = await db
+    .select()
+    .from(purchaseOrder)
+    .where(inArray(purchaseOrder.id, poIds));
+  const poById = new Map(pos.map((p) => [p.id, p]));
+  for (const r of input.receipts) {
+    const po = poById.get(r.purchaseOrderId);
+    if (!po) notFound("Purchase order not found");
+    if (po!.warehouseId !== r.warehouseId) {
+      conflict("Purchase order does not belong to this warehouse", {
+        code: "PO_WAREHOUSE_MISMATCH"
+      });
+    }
+    if (po!.status === "closed" || po!.status === "cancelled") {
+      conflict("Purchase order is not receivable", { code: "PO_NOT_RECEIVABLE" });
+    }
+  }
+
+  const lotByKey = new Map<string, string | null>();
+  for (const r of input.receipts) {
+    for (const l of r.lines) {
+      const key = `${l.itemId}:${l.lotCode ?? ""}`;
+      if (!lotByKey.has(key)) {
+        lotByKey.set(key, await ensureLot(db, l.itemId, l.lotCode, l.expiryDate));
+      }
+    }
+  }
+
+  const balanceCache = new Map<string, typeof stockBalance.$inferSelect | null>();
+  async function getBalance(
+    warehouseId: string,
+    locationId: string,
+    itemId: string,
+    lotId: string | null
+  ) {
+    const key = `${warehouseId}:${locationId}:${itemId}:${lotId ?? ""}`;
+    if (!balanceCache.has(key)) {
+      const row = await db
+        .select()
+        .from(stockBalance)
+        .where(
+          and(
+            eq(stockBalance.warehouseId, warehouseId),
+            eq(stockBalance.locationId, locationId),
+            eq(stockBalance.itemId, itemId),
+            lotId ? eq(stockBalance.lotId, lotId) : isNull(stockBalance.lotId)
+          )
+        )
+        .get();
+      balanceCache.set(key, row ?? null);
+    }
+    return balanceCache.get(key) ?? null;
+  }
+
+  const poLines = await db
+    .select()
+    .from(purchaseOrderLine)
+    .where(inArray(purchaseOrderLine.purchaseOrderId, poIds));
+  const poLineById = new Map(poLines.map((l) => [l.id, l]));
+
+  const stmts: BatchItem<"sqlite">[] = [];
+  const createdReceiptIds: string[] = [];
+  let movementCount = 0;
+  const acceptedByPoLine = new Map<string, number>();
+  const acceptedByPo = new Map<string, number>();
+
+  for (const r of input.receipts) {
+    const receiptId = crypto.randomUUID();
+    const receiptNumber = `RCP-${(now + createdReceiptIds.length)
+      .toString(36)
+      .toUpperCase()}`;
+    createdReceiptIds.push(receiptId);
+
+    stmts.push(
+      db.insert(receipt).values({
+        id: receiptId,
+        warehouseId: r.warehouseId,
+        purchaseOrderId: r.purchaseOrderId,
+        receiptNumber,
+        status: "posted",
+        receivedBy: staffId,
+        receivedAt: now
+      })
+    );
+
+    for (const l of r.lines) {
+      const lineId = crypto.randomUUID();
+      const lotId = lotByKey.get(`${l.itemId}:${l.lotCode ?? ""}`) ?? null;
+
+      stmts.push(
+        db.insert(receiptLine).values({
+          id: lineId,
+          receiptId,
+          purchaseOrderLineId: l.purchaseOrderLineId ?? null,
+          itemId: l.itemId,
+          lotId,
+          targetLocationId: l.targetLocationId,
+          receivedQty: l.receivedQty,
+          acceptedQty: l.acceptedQty,
+          rejectedQty: l.rejectedQty,
+          status: "posted"
+        })
+      );
+
+      stmts.push(
+        db.insert(qualityInspection).values({
+          id: crypto.randomUUID(),
+          receiptLineId: lineId,
+          result: l.inspectionResult,
+          discrepancyCode: l.discrepancyCode ?? null,
+          notes: l.notes ?? null,
+          inspectedBy: staffId,
+          inspectedAt: now
+        })
+      );
+
+      if (l.purchaseOrderLineId) {
+        acceptedByPoLine.set(
+          l.purchaseOrderLineId,
+          (acceptedByPoLine.get(l.purchaseOrderLineId) ?? 0) + l.acceptedQty
+        );
+        acceptedByPo.set(
+          r.purchaseOrderId,
+          (acceptedByPo.get(r.purchaseOrderId) ?? 0) + l.acceptedQty
+        );
+      }
+
+      if (l.inspectionResult === "accepted" && l.acceptedQty > 0) {
+        const existing = await getBalance(
+          r.warehouseId,
+          l.targetLocationId,
+          l.itemId,
+          lotId
+        );
+        const bundle = buildSingleLocationMovementStatements(
+          db,
+          {
+            warehouseId: r.warehouseId,
+            itemId: l.itemId,
+            lotId,
+            toLocationId: l.targetLocationId,
+            qtyDelta: l.acceptedQty,
+            movementType: "receive",
+            referenceType: "receipt",
+            referenceId: receiptId,
+            performedBy: staffId,
+            occurredAt: now
+          },
+          existing
+        );
+        stmts.push(bundle.movementStmt, bundle.balanceStmt);
+        movementCount += 1;
+      }
+    }
+  }
+
+  if (movementCount === 0) {
+    conflict("Nothing to post — accept at least one line", {
+      code: "NOTHING_TO_POST"
+    });
+  }
+
+  for (const [poLineId, extra] of acceptedByPoLine) {
+    if (extra <= 0) continue;
+    const pl = poLineById.get(poLineId);
+    if (!pl) continue;
+    const newReceived = pl.receivedQty + extra;
+    const status =
+      newReceived >= pl.orderedQty ? "received" : "partially_received";
+    stmts.push(
+      db
+        .update(purchaseOrderLine)
+        .set({ receivedQty: newReceived, status })
+        .where(eq(purchaseOrderLine.id, poLineId))
+    );
+  }
+
+  for (const r of input.receipts) {
+    const accepted = acceptedByPo.get(r.purchaseOrderId) ?? 0;
+    if (accepted <= 0) continue;
+    const lines = poLines.filter((l) => l.purchaseOrderId === r.purchaseOrderId);
+    const allReceived = lines.every((l) => {
+      const extra = acceptedByPoLine.get(l.id) ?? 0;
+      return l.receivedQty + extra >= l.orderedQty;
+    });
+    stmts.push(
+      db
+        .update(purchaseOrder)
+        .set({ status: allReceived ? "received" : "partially_received" })
+        .where(eq(purchaseOrder.id, r.purchaseOrderId))
+    );
+  }
+
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+
+  for (const r of input.receipts) {
+    for (const l of r.lines) {
+      if (l.inspectionResult === "rejected" && l.discrepancyCode) {
+        await createNotification(db, {
+          userId: staffId,
+          movementId: null,
+          severity: "warning",
+          type: "po_discrepancy",
+          title: "PO discrepancy detected",
+          message: `Line rejected during inspection (${l.discrepancyCode}).`
+        });
+      }
+    }
+  }
+
+  const receipts = await Promise.all(
+    createdReceiptIds.map((id) => buildReceiptDto(db, id))
+  );
+
+  return { receipts, movementCount };
 }

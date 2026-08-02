@@ -127,3 +127,16 @@ export const locationListResponseSchema = z.object({
 });
 
 export type LocationListResponse = z.infer<typeof locationListResponseSchema>;
+
+export const zoneListItemSchema = zoneSchema.extend({
+  warehouseCode: z.string(),
+  warehouseName: z.string()
+});
+
+export type ZoneListItem = z.infer<typeof zoneListItemSchema>;
+
+export const zoneListResponseSchema = z.object({
+  items: z.array(zoneListItemSchema)
+});
+
+export type ZoneListResponse = z.infer<typeof zoneListResponseSchema>;

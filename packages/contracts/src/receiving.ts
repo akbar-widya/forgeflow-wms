@@ -95,3 +95,48 @@ export const postReceiptRequestSchema = z.object({
 });
 
 export type PostReceiptRequest = z.infer<typeof postReceiptRequestSchema>;
+
+export const batchPostReceiptsRequestSchema = z.object({
+  receipts: z
+    .array(
+      z.object({
+        warehouseId: z.string().min(1),
+        purchaseOrderId: z.string().min(1),
+        lines: z
+          .array(
+            z.object({
+              purchaseOrderLineId: z.string().optional(),
+              itemId: z.string().min(1),
+              lotCode: z.string().optional(),
+              expiryDate: z.number().optional(),
+              targetLocationId: z.string().min(1),
+              receivedQty: z.number().positive(),
+              inspectionResult: z.enum([
+                "accepted",
+                "rejected",
+                "quarantined"
+              ]),
+              acceptedQty: z.number().nonnegative(),
+              rejectedQty: z.number().nonnegative(),
+              discrepancyCode: discrepancyCodeSchema.optional(),
+              notes: z.string().max(500).optional()
+            })
+          )
+          .min(1)
+      })
+    )
+    .min(1)
+});
+
+export type BatchPostReceiptsRequest = z.infer<
+  typeof batchPostReceiptsRequestSchema
+>;
+
+export const batchPostReceiptsResponseSchema = z.object({
+  receipts: z.array(receiptSchema),
+  movementCount: z.number()
+});
+
+export type BatchPostReceiptsResponse = z.infer<
+  typeof batchPostReceiptsResponseSchema
+>;

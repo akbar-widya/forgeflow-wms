@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { ForgeDb } from "@forgeflow/db";
 import {
   createReceiptRequestSchema,
-  inspectReceiptLineRequestSchema
+  inspectReceiptLineRequestSchema,
+  batchPostReceiptsRequestSchema
 } from "@forgeflow/contracts";
 import { getDb } from "../db";
 import { authRequired } from "../middleware/auth-required";
@@ -11,6 +12,7 @@ import { validate } from "../middleware/validate";
 import type { AppEnv } from "../types";
 import {
   buildReceiptDto,
+  batchPostReceipts,
   createReceipt,
   inspectReceiptLine,
   postReceipt
@@ -39,6 +41,27 @@ receivingRoutes.post(
       () => createReceipt(db, input, staffId)
     );
     return c.json(receipt, 201);
+  }
+);
+
+receivingRoutes.post(
+  "/receipts/batch-post",
+  requireWriteRole("operator", "manager", "admin"),
+  validate(batchPostReceiptsRequestSchema),
+  async (c) => {
+    const db: ForgeDb = getDb(c.env);
+    const input = c.req.valid("json");
+    const staffId = c.get("staffId");
+    const idempotencyHeader = c.req.header("Idempotency-Key");
+
+    const result = await withIdempotency(
+      db,
+      idempotencyHeader,
+      "batch_post_receipts",
+      JSON.stringify(input),
+      () => batchPostReceipts(db, input, staffId)
+    );
+    return c.json(result, 201);
   }
 );
 

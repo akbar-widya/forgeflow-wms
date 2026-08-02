@@ -7,6 +7,8 @@ import {
   type QueryParams
 } from "@/lib/api-client";
 import type {
+  BatchPostReceiptsRequest,
+  BatchPostReceiptsResponse,
   CapacityResponse,
   CreateIssuesRequest,
   CreateJobRequest,
@@ -33,7 +35,8 @@ import type {
   StockBalanceListResponse,
   Warehouse,
   WarehouseListResponse,
-  WarehouseLocationsResponse
+  WarehouseLocationsResponse,
+  ZoneListResponse
 } from "@forgeflow/contracts";
 
 export function useMe() {
@@ -227,6 +230,25 @@ export function usePostReceipt() {
   });
 }
 
+export function useBatchPostReceipts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BatchPostReceiptsRequest) =>
+      apiPost<BatchPostReceiptsResponse>(
+        "/api/receipts/batch-post",
+        body,
+        genIdempotencyKey()
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["receipts"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["stock-balances"] });
+      qc.invalidateQueries({ queryKey: ["movements"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+}
+
 export function useCreateJob() {
   const qc = useQueryClient();
   return useMutation({
@@ -297,7 +319,15 @@ export function useCreateZone() {
       apiPost(`/api/warehouses/${warehouseId}/zones`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["warehouses"] });
+      qc.invalidateQueries({ queryKey: ["zones"] });
     }
+  });
+}
+
+export function useZones() {
+  return useQuery({
+    queryKey: ["zones"],
+    queryFn: () => apiGet<ZoneListResponse>("/api/zones")
   });
 }
 
