@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, RotateCcw, Workflow } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardCheck,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Workflow
+} from "lucide-react";
 import {
   useCreateIssues,
   useCreateJob,
@@ -9,7 +17,7 @@ import {
   useItems,
   useJob,
   useJobs,
-  usePreviewIssues,
+  useStockBalances,
   useWarehouses,
   useWarehouseLocations
 } from "@/lib/hooks";
@@ -34,7 +42,8 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
-import { formatNumber } from "@/lib/utils";
+import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
+import type { JobBomLine, StockBalance } from "@forgeflow/contracts";
 
 function CreateJobDialog({
   open,
@@ -217,97 +226,354 @@ function CreateJobDialog({
   );
 }
 
-function JobDetail({ jobId }: { jobId: string }) {
+type Allocation = {
+  key: string;
+  balanceId: string;
+  bomLineId: string;
+  itemId: string;
+  sku: string;
+  itemName: string;
+  lotId: string | null;
+  lotCode: string | null;
+  locationId: string;
+  locationCode: string;
+  qty: number;
+};
+
+function AllocateDialog({
+  line,
+  balances,
+  allocations,
+  onClose,
+  onAdd,
+  onRemove
+}: {
+  line: JobBomLine;
+  balances: StockBalance[];
+  allocations: Allocation[];
+  onClose: () => void;
+  onAdd: (a: Allocation) => void;
+  onRemove: (key: string) => void;
+}) {
+  const [balanceId, setBalanceId] = useState("");
+  const [qty, setQty] = useState(0);
+
+  const remaining = line.requiredQty - line.issuedQty;
+  const allocatedForLine = allocations
+    .filter((a) => a.bomLineId === line.id)
+    .reduce((s, a) => s + a.qty, 0);
+  const leftToAllocate = Math.max(0, remaining - allocatedForLine);
+
+  const eligible = balances.filter(
+    (b) => b.itemId === line.itemId && b.availableQty > 0
+  );
+  const usedFromBalance = (balanceId: string) =>
+    allocations
+      .filter((a) => a.balanceId === balanceId)
+      .reduce((s, a) => s + a.qty, 0);
+
+  const selectedBalance = eligible.find((b) => b.id === balanceId);
+  const maxQty = selectedBalance
+    ? Math.min(
+        selectedBalance.availableQty - usedFromBalance(selectedBalance.id),
+        leftToAllocate
+      )
+    : 0;
+
+  function add() {
+    if (!selectedBalance || qty <= 0) {
+      toast.error("Choose a lot/location and enter a quantity");
+      return;
+    }
+    onAdd({
+      key: `${line.id}:${selectedBalance.id}`,
+      balanceId: selectedBalance.id,
+      bomLineId: line.id,
+      itemId: line.itemId,
+      sku: line.sku,
+      itemName: line.itemName,
+      lotId: selectedBalance.lotId,
+      lotCode: selectedBalance.lotCode,
+      locationId: selectedBalance.locationId,
+      locationCode: selectedBalance.locationCode,
+      qty
+    });
+    setBalanceId("");
+    setQty(0);
+  }
+
+  const lineAllocations = allocations.filter((a) => a.bomLineId === line.id);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Allocate — {line.sku}</DialogTitle>
+          <DialogDescription>
+            {line.itemName} · required {formatNumber(line.requiredQty)} · issued{" "}
+            {formatNumber(line.issuedQty)} · remaining {formatNumber(remaining)}
+          </DialogDescription>
+        </DialogHeader>
+
+        {leftToAllocate <= 0 ? (
+          <p className="text-sm text-muted-foreground">
+            This line is fully issued — nothing left to allocate.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[240px] flex-1 space-y-1.5">
+                <Label>Lot · Location</Label>
+                <Select value={balanceId} onValueChange={setBalanceId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select stock" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eligible.map((b) => {
+                      const avail = b.availableQty - usedFromBalance(b.id);
+                      return (
+                        <SelectItem key={b.id} value={b.id} disabled={avail <= 0}>
+                          {b.lotCode ?? "No lot"} · {b.locationCode} ·{" "}
+                          {formatNumber(avail)} available
+                        </SelectItem>
+                      );
+                    })}
+                    {eligible.length === 0 && (
+                      <SelectItem value="__none" disabled>
+                        No available stock for this item
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Qty</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={Math.max(0, maxQty)}
+                  className="w-28"
+                  value={qty || ""}
+                  onChange={(e) => setQty(Number(e.target.value))}
+                />
+              </div>
+              <Button
+                onClick={add}
+                disabled={!selectedBalance || qty <= 0 || maxQty <= 0}
+              >
+                <Plus data-icon="inline-start" />
+                Add allocation
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {formatNumber(leftToAllocate)} of {formatNumber(remaining)} still to
+              allocate for this line.
+            </p>
+
+            {lineAllocations.length > 0 && (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Lot</th>
+                    <th>Location</th>
+                    <th className="text-right">Qty</th>
+                    <th className="text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineAllocations.map((a) => (
+                    <tr key={a.key}>
+                      <td className="font-mono text-xs">{a.lotCode ?? "—"}</td>
+                      <td className="font-mono text-xs">{a.locationCode}</td>
+                      <td className="text-right font-mono">{formatNumber(a.qty)}</td>
+                      <td className="text-right">
+                        <Button size="icon" variant="ghost" onClick={() => onRemove(a.key)}>
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
+  const navigate = useNavigate();
   const { data: job } = useJob(jobId);
-  const preview = usePreviewIssues();
+  const { data: balancesData } = useStockBalances({
+    warehouseId: job?.warehouseId,
+    pageSize: 200
+  });
+  const balances = balancesData?.items ?? [];
   const createIssues = useCreateIssues();
   const scrapReturn = useCreateScrapReturn();
   const { data: whLocations } = useWarehouseLocations(job?.warehouseId);
   const locations = whLocations?.locations ?? [];
 
-  const [issueQuantities, setIssueQuantities] = useState<Record<string, number>>({});
+  const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [allocateLineId, setAllocateLineId] = useState<string | null>(null);
   const [scrapOpen, setScrapOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!job) return null;
 
-  const canIssue = job.status === "planned" || job.status === "allocated" || job.status === "in_progress";
+  const canIssue =
+    job.status === "planned" ||
+    job.status === "allocated" ||
+    job.status === "in_progress";
+  const totalAllocated = allocations.reduce((s, a) => s + a.qty, 0);
+  const allocateLine =
+    job.bomLines.find((l) => l.id === allocateLineId) ?? null;
+
+  function addAllocation(a: Allocation) {
+    setAllocations((prev) => {
+      const existing = prev.find((x) => x.key === a.key);
+      return existing
+        ? prev.map((x) => (x.key === a.key ? { ...x, qty: x.qty + a.qty } : x))
+        : [...prev, a];
+    });
+  }
+
+  function removeAllocation(key: string) {
+    setAllocations((prev) => prev.filter((a) => a.key !== key));
+  }
+
+  async function handleIssueMaterials() {
+    if (allocations.length === 0) return;
+    setSubmitting(true);
+    try {
+      await createIssues.mutateAsync({
+        jobId: job.id,
+        body: {
+          lines: allocations.map((a) => ({
+            bomLineId: a.bomLineId,
+            sourceLocationId: a.locationId,
+            lotId: a.lotId ?? undefined,
+            issueQty: a.qty
+          }))
+        }
+      });
+      toast.success(
+        `Issued ${formatNumber(totalAllocated)} units to ${job.jobNumber}`
+      );
+      setAllocations([]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Issue materials failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const detailCells: { label: string; value: ReactNode }[] = [
+    { label: "Job number", value: job.jobNumber },
+    { label: "Work order", value: job.workOrderRef ?? "—" },
+    { label: "Warehouse", value: job.warehouseCode },
+    { label: "Due date", value: formatDate(job.dueDate) },
+    { label: "Status", value: <StatusBadge kind="job" value={job.status} /> },
+    { label: "Created", value: formatDateTime(job.createdAt) },
+    { label: "BOM lines", value: String(job.bomLines.length) }
+  ];
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
-            <ArrowLeft className="size-4" />
-          </Button>
-          <div>
-            <CardTitle className="text-base">{job.jobNumber}</CardTitle>
-            <div className="text-xs text-muted-foreground">
-              {job.warehouseCode} · {job.workOrderRef ?? "no work order"}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge kind="job" value={job.status} />
-          {canIssue && (
+    <div>
+      <PageHeader
+        title={job.jobNumber}
+        description={`${job.warehouseCode} · ${
+          job.workOrderRef ?? "no work order"
+        }${job.dueDate ? ` · due ${formatDate(job.dueDate)}` : ""}`}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeft data-icon="inline-start" />
+              Back
+            </Button>
+            {canIssue && (
+              <Button variant="outline" size="sm" onClick={() => setScrapOpen(true)}>
+                <RotateCcw data-icon="inline-start" />
+                Scrap return
+              </Button>
+            )}
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => setScrapOpen(true)}
+              onClick={handleIssueMaterials}
+              disabled={submitting || allocations.length === 0 || !canIssue}
             >
-              <RotateCcw data-icon="inline-start" />
-              Scrap return
+              <ClipboardCheck data-icon="inline-start" />
+              {submitting
+                ? "Issuing..."
+                : `Issue materials${totalAllocated > 0 ? ` (${formatNumber(totalAllocated)})` : ""}`}
             </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Item</th>
-              <th className="text-right">Required</th>
-              <th className="text-right">Issued</th>
-              <th>Status</th>
-              {canIssue && (
-                <>
-                  <th className="text-right">Issue qty</th>
+          </>
+        }
+      />
+
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Job details</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-4">
+              {detailCells.map((cell) => (
+                <div key={cell.label} className="bg-card p-4">
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    {cell.label}
+                  </div>
+                  <div className="mt-1 text-sm">{cell.value}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Bill of materials</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Item</th>
+                  <th className="text-right">Required</th>
+                  <th className="text-right">Issued</th>
+                  <th className="text-right">Allocated</th>
+                  <th className="text-right">Remaining</th>
+                  <th>Status</th>
                   <th className="text-right">Action</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {job.bomLines.map((line) => {
-              const remaining = line.requiredQty - line.issuedQty;
-              const alreadyDone = remaining <= 0;
-              return (
-                <tr key={line.id}>
-                  <td className="font-mono text-xs">{line.sku}</td>
-                  <td className="font-medium">{line.itemName}</td>
-                  <td className="text-right font-mono">{formatNumber(line.requiredQty)}</td>
-                  <td className="text-right font-mono">{formatNumber(line.issuedQty)}</td>
-                  <td>
-                    <StatusBadge
-                      kind="stock"
-                      value={alreadyDone ? "available" : line.issuedQty > 0 ? "low" : "out_of_stock"}
-                    />
-                  </td>
-                  {canIssue && (
-                    <>
-                      <td className="text-right">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={remaining}
-                          disabled={alreadyDone}
-                          className="ml-auto h-7 w-24 text-right text-xs"
-                          value={issueQuantities[line.id] ?? ""}
-                          onChange={(e) =>
-                            setIssueQuantities((q) => ({
-                              ...q,
-                              [line.id]: Number(e.target.value)
-                            }))
+                </tr>
+              </thead>
+              <tbody>
+                {job.bomLines.map((line) => {
+                  const remaining = line.requiredQty - line.issuedQty;
+                  const allocatedInCart = allocations
+                    .filter((a) => a.bomLineId === line.id)
+                    .reduce((s, a) => s + a.qty, 0);
+                  const fullyIssued = remaining <= 0;
+                  return (
+                    <tr key={line.id}>
+                      <td className="font-mono text-xs">{line.sku}</td>
+                      <td className="font-medium">{line.itemName}</td>
+                      <td className="text-right font-mono">{formatNumber(line.requiredQty)}</td>
+                      <td className="text-right font-mono">{formatNumber(line.issuedQty)}</td>
+                      <td className="text-right font-mono">{formatNumber(allocatedInCart)}</td>
+                      <td className="text-right font-mono">{formatNumber(Math.max(0, remaining))}</td>
+                      <td>
+                        <StatusBadge
+                          kind="stock"
+                          value={
+                            fullyIssued
+                              ? "available"
+                              : line.issuedQty > 0
+                                ? "low"
+                                : "out_of_stock"
                           }
                         />
                       </td>
@@ -315,51 +581,85 @@ function JobDetail({ jobId }: { jobId: string }) {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={alreadyDone || !(issueQuantities[line.id] ?? 0)}
-                          onClick={async () => {
-                            try {
-                              const result = await preview.mutateAsync(jobId);
-                              const previewLine = result.lines.find(
-                                (l) => l.bomLineId === line.id
-                              );
-                              const qty = issueQuantities[line.id] ?? 0;
-                              if (previewLine?.short) {
-                                toast.warning(
-                                  `Only ${previewLine.availableQty} available for ${line.sku}`
-                                );
-                              }
-                              await createIssues.mutateAsync({
-                                jobId,
-                                body: {
-                                  lines: [
-                                    {
-                                      bomLineId: line.id,
-                                      issueQty: qty,
-                                      sourceLocationId:
-                                        previewLine?.locationId ?? locations[0]?.id ?? ""
-                                    }
-                                  ]
-                                }
-                              });
-                              toast.success(`Issued ${formatNumber(qty)} × ${line.sku}`);
-                            } catch (err) {
-                              toast.error(
-                                err instanceof Error ? err.message : "Issue failed"
-                              );
-                            }
-                          }}
+                          disabled={!canIssue || remaining <= 0}
+                          onClick={() => setAllocateLineId(line.id)}
                         >
-                          Issue
+                          Allocate
                         </Button>
                       </td>
-                    </>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </CardContent>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Allocations</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {allocations.length} allocation(s) ·{" "}
+              {formatNumber(totalAllocated)} units ready to issue
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            {allocations.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No allocations staged. Use "Allocate" on a BOM line to pick the
+                exact lot and location.
+              </div>
+            ) : (
+              <div className="max-h-[400px] overflow-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Item</th>
+                      <th>Lot</th>
+                      <th>Location</th>
+                      <th className="text-right">Qty</th>
+                      <th className="text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allocations.map((a) => (
+                      <tr key={a.key}>
+                        <td className="font-mono text-xs">{a.sku}</td>
+                        <td>{a.itemName}</td>
+                        <td className="font-mono text-xs">{a.lotCode ?? "—"}</td>
+                        <td className="font-mono text-xs">{a.locationCode}</td>
+                        <td className="text-right font-mono">{formatNumber(a.qty)}</td>
+                        <td className="text-right">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeAllocation(a.key)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {allocateLine && (
+        <AllocateDialog
+          key={allocateLine.id}
+          line={allocateLine}
+          balances={balances}
+          allocations={allocations}
+          onClose={() => setAllocateLineId(null)}
+          onAdd={addAllocation}
+          onRemove={removeAllocation}
+        />
+      )}
 
       <ScrapReturnDialog
         open={scrapOpen}
@@ -375,7 +675,7 @@ function JobDetail({ jobId }: { jobId: string }) {
             )
         }
       />
-    </Card>
+    </div>
   );
 }
 
@@ -499,9 +799,9 @@ function ScrapReturnDialog({
 }
 
 export function JobAllocationPage() {
-  const [createOpen, setCreateOpen] = useState(false);
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
   const { data: jobs } = useJobs({ pageSize: 100 });
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -509,6 +809,12 @@ export function JobAllocationPage() {
     if (statusFilter === "all") return jobs?.items ?? [];
     return (jobs?.items ?? []).filter((j) => j.status === statusFilter);
   }, [jobs, statusFilter]);
+
+  if (jobId) {
+    return (
+      <JobDetail jobId={jobId} onBack={() => navigate("/outbound/job-allocation")} />
+    );
+  }
 
   return (
     <div>
@@ -558,7 +864,7 @@ export function JobAllocationPage() {
                 <tr
                   key={job.id}
                   className="cursor-pointer"
-                  onClick={() => navigate(`/jobs/${job.id}`)}
+                  onClick={() => navigate(`/outbound/job-allocation/${job.id}`)}
                 >
                   <td className="font-mono text-xs">{job.jobNumber}</td>
                   <td className="font-mono text-xs">{job.workOrderRef ?? "—"}</td>
@@ -576,7 +882,7 @@ export function JobAllocationPage() {
                       variant="outline"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/jobs/${job.id}`);
+                        navigate(`/outbound/job-allocation/${job.id}`);
                       }}
                     >
                       Open
@@ -595,12 +901,6 @@ export function JobAllocationPage() {
           </table>
         </CardContent>
       </Card>
-
-      {jobId && (
-        <div className="mt-6">
-          <JobDetail jobId={jobId} />
-        </div>
-      )}
 
       <CreateJobDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>

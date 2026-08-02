@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { type BatchItem } from "drizzle-orm/batch";
 import {
   job,
   jobBomLine,
@@ -15,7 +16,11 @@ import type {
   ScrapReturnRequest
 } from "@forgeflow/contracts";
 import { badRequest, conflict, notFound } from "../lib/http";
-import { applySingleLocationMovement } from "./movement-service";
+import {
+  applySingleLocationMovement,
+  buildSingleLocationMovementStatements,
+  type BalanceProjection
+} from "./movement-service";
 import { createNotification } from "./notification-service";
 
 export async function previewIssues(
@@ -65,6 +70,27 @@ export async function previewIssues(
   return { jobId, lines: result };
 }
 
+async function findBalanceByLocationItemLot(
+  db: ForgeDb,
+  warehouseId: string,
+  locationId: string,
+  itemId: string,
+  lotId: string | null
+) {
+  return db
+    .select()
+    .from(stockBalance)
+    .where(
+      and(
+        eq(stockBalance.warehouseId, warehouseId),
+        eq(stockBalance.locationId, locationId),
+        eq(stockBalance.itemId, itemId),
+        lotId ? eq(stockBalance.lotId, lotId) : isNull(stockBalance.lotId)
+      )
+    )
+    .get();
+}
+
 export async function createIssues(
   db: ForgeDb,
   jobId: string,
@@ -77,77 +103,119 @@ export async function createIssues(
     conflict(`Cannot issue against ${j.status} job`);
   }
 
-  const movements: string[] = [];
-  for (const req of input.lines) {
-    const bomLine = await db
-      .select()
-      .from(jobBomLine)
-      .where(and(eq(jobBomLine.id, req.bomLineId), eq(jobBomLine.jobId, jobId)))
-      .get();
-    if (!bomLine) badRequest("BOM line not found", { bomLineId: req.bomLineId });
-
-    const balance = await db
-      .select()
-      .from(stockBalance)
-      .where(
-        and(
-          eq(stockBalance.locationId, req.sourceLocationId),
-          eq(stockBalance.itemId, bomLine!.itemId)
-        )
-      )
-      .get();
-    if (!balance || balance.availableQty < req.issueQty) {
-      conflict("Insufficient available stock for issue", {
-        code: "INSUFFICIENT_STOCK",
-        bomLineId: req.bomLineId,
-        availableQty: balance?.availableQty ?? 0
-      });
-    }
-
-    const movementId = await applySingleLocationMovement({
-      db,
-      warehouseId: j.warehouseId,
-      itemId: bomLine!.itemId,
-      lotId: balance!.lotId,
-      locationId: req.sourceLocationId,
-      qtyDelta: -req.issueQty,
-      movementType: "issue",
-      referenceType: "job_issue",
-      referenceId: jobId,
-      performedBy: staffId,
-      occurredAt: Date.now()
-    });
-    movements.push(movementId);
-
-    const newIssued = bomLine!.issuedQty + req.issueQty;
-    const lineStatus =
-      newIssued >= bomLine!.requiredQty ? "issued" : "partially_issued";
-    await db
-      .update(jobBomLine)
-      .set({ issuedQty: newIssued, status: lineStatus })
-      .where(eq(jobBomLine.id, req.bomLineId));
-
-    await db.insert(jobIssue).values({
-      id: crypto.randomUUID(),
-      jobBomLineId: req.bomLineId,
-      sourceLocationId: req.sourceLocationId,
-      issueQty: req.issueQty,
-      issuedBy: staffId,
-      issuedAt: Date.now()
-    });
-  }
-
-  const allLines = await db
+  const bomLines = await db
     .select()
     .from(jobBomLine)
     .where(eq(jobBomLine.jobId, jobId));
-  const allIssued = allLines.every((l) => l.status === "issued");
-  await db
-    .update(job)
-    .set({ status: allIssued ? "allocated" : "in_progress" })
-    .where(eq(job.id, jobId));
+  const lineById = new Map(bomLines.map((l) => [l.id, l]));
 
-  void movements;
+  const now = Date.now();
+  const stmts: BatchItem<"sqlite">[] = [];
+  const issuedDelta = new Map<string, number>();
+  const projected = new Map<string, BalanceProjection>();
+
+  for (const req of input.lines) {
+    const bomLine = lineById.get(req.bomLineId);
+    if (!bomLine) badRequest("BOM line not found", { bomLineId: req.bomLineId });
+
+    const balance = await findBalanceByLocationItemLot(
+      db,
+      j.warehouseId,
+      req.sourceLocationId,
+      bomLine.itemId,
+      req.lotId ?? null
+    );
+
+    const prev =
+      projected.get(balance?.id ?? "") ??
+      (balance
+        ? {
+            id: balance.id,
+            onHandQty: balance.onHandQty,
+            availableQty: balance.availableQty,
+            stockStatus: balance.stockStatus
+          }
+        : undefined);
+
+    if (!balance || !prev || prev.availableQty < req.issueQty) {
+      conflict("Insufficient available stock for issue", {
+        code: "INSUFFICIENT_STOCK",
+        bomLineId: req.bomLineId,
+        availableQty: prev?.availableQty ?? 0
+      });
+    }
+
+    const onHandQty = prev.onHandQty - req.issueQty;
+    const next: BalanceProjection = {
+      id: prev.id,
+      onHandQty,
+      availableQty: onHandQty,
+      stockStatus: onHandQty <= 0 ? "out_of_stock" : prev.stockStatus
+    };
+    projected.set(prev.id, next);
+
+    const { movementId, movementStmt, balanceStmt } =
+      buildSingleLocationMovementStatements(
+        db,
+        {
+          warehouseId: j.warehouseId,
+          itemId: bomLine.itemId,
+          lotId: req.lotId ?? null,
+          locationId: req.sourceLocationId,
+          qtyDelta: -req.issueQty,
+          movementType: "issue",
+          referenceType: "job_issue",
+          referenceId: jobId,
+          performedBy: staffId,
+          occurredAt: now
+        },
+        prev
+      );
+
+    stmts.push(movementStmt, balanceStmt);
+    issuedDelta.set(bomLine.id, (issuedDelta.get(bomLine.id) ?? 0) + req.issueQty);
+
+    stmts.push(
+      db.insert(jobIssue).values({
+        id: crypto.randomUUID(),
+        jobBomLineId: bomLine.id,
+        sourceLocationId: req.sourceLocationId,
+        issueQty: req.issueQty,
+        issuedBy: staffId,
+        issuedAt: now
+      })
+    );
+  }
+
+  for (const [bomLineId, delta] of issuedDelta) {
+    const bomLine = lineById.get(bomLineId)!;
+    const newIssued = bomLine.issuedQty + delta;
+    const lineStatus = newIssued >= bomLine.requiredQty ? "issued" : "partially_issued";
+    stmts.push(
+      db
+        .update(jobBomLine)
+        .set({ issuedQty: newIssued, status: lineStatus })
+        .where(eq(jobBomLine.id, bomLineId))
+    );
+  }
+
+  const allLines = bomLines.map((l) => ({
+    status: l.status,
+    requiredQty: l.requiredQty,
+    issuedQty: l.issuedQty + (issuedDelta.get(l.id) ?? 0)
+  }));
+  const allIssued = allLines.every(
+    (l) => l.status === "issued" || l.issuedQty >= l.requiredQty
+  );
+  stmts.push(
+    db
+      .update(job)
+      .set({ status: allIssued ? "allocated" : "in_progress" })
+      .where(eq(job.id, jobId))
+  );
+
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+
   return previewIssues(db, jobId);
 }
 

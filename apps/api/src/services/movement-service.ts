@@ -30,6 +30,13 @@ export type MovementCommand = {
   occurredAt?: number;
 };
 
+export type BalanceProjection = {
+  id: string;
+  onHandQty: number;
+  availableQty: number;
+  stockStatus: StockStatus;
+};
+
 export function computeStockStatus(
   availableQty: number,
   reorderPoint: number | null
@@ -77,7 +84,7 @@ export type MovementStatementBundle = {
 export function buildSingleLocationMovementStatements(
   db: ForgeDb,
   cmd: Omit<MovementCommand, "db">,
-  existing?: typeof stockBalance.$inferSelect
+  existing?: BalanceProjection
 ): MovementStatementBundle {
   const {
     warehouseId,

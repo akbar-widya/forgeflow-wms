@@ -22,6 +22,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/inbound/receiving" element={<ReceivingPage />} />
           <Route path="/outbound/job-allocation" element={<JobAllocationPage />} />
+          <Route path="/outbound/job-allocation/:jobId" element={<JobAllocationPage />} />
           <Route path="/movements" element={<MovementsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/master-data" element={<MasterDataPage />} />

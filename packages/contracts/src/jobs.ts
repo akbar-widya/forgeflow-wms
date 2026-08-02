@@ -111,6 +111,7 @@ export type IssuePreviewResponse = z.infer<typeof issuePreviewResponseSchema>;
 export const issueRequestSchema = z.object({
   bomLineId: z.string().min(1),
   sourceLocationId: z.string().min(1),
+  lotId: z.string().optional(),
   issueQty: z.number().positive(),
   idempotencyKey: z.string().min(8).max(128).optional()
 });
