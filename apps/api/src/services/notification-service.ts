@@ -1,4 +1,5 @@
 import { and, desc, eq, count, isNull } from "drizzle-orm";
+import { type BatchItem } from "drizzle-orm/batch";
 import {
   notification,
   type ForgeDb,
@@ -11,6 +12,61 @@ import type {
 } from "@forgeflow/contracts";
 import { notFound } from "../lib/http";
 import { offsetFor, pageMeta } from "../lib/pagination";
+
+/**
+ * Build an INSERT statement (or null when the item still has stock) for a
+ * critical "stock shortage" notification. Designed to be pushed into the same
+ * atomic batch as the movement that drained the item to zero.
+ */
+export function buildStockShortageNotificationStatement(
+  db: ForgeDb,
+  input: {
+    authUserId: string;
+    movementId: string;
+    itemLabel: string;
+    onHandQty: number;
+  }
+): BatchItem<"sqlite"> | null {
+  if (input.onHandQty > 0) return null;
+  return db.insert(notification).values({
+    id: crypto.randomUUID(),
+    userId: input.authUserId,
+    movementId: input.movementId,
+    severity: "critical",
+    type: "stock_shortage",
+    title: "Stock shortage",
+    message: `${input.itemLabel} is out of stock (on-hand 0).`,
+    readAt: null,
+    createdAt: Date.now()
+  });
+}
+
+/**
+ * Build an INSERT statement for a warning "PO over-receipt" notification.
+ */
+export function buildPoDiscrepancyNotificationStatement(
+  db: ForgeDb,
+  input: {
+    authUserId: string;
+    movementId?: string | null;
+    poNumber: string | null;
+    itemLabel: string;
+    orderedQty: number;
+    receivedQty: number;
+  }
+): BatchItem<"sqlite"> {
+  return db.insert(notification).values({
+    id: crypto.randomUUID(),
+    userId: input.authUserId,
+    movementId: input.movementId ?? null,
+    severity: "warning",
+    type: "po_discrepancy",
+    title: "PO over-receipt",
+    message: `${input.poNumber ?? "PO"}: received ${input.receivedQty} × ${input.itemLabel} against ${input.orderedQty} ordered.`,
+    readAt: null,
+    createdAt: Date.now()
+  });
+}
 
 export async function createNotification(
   db: ForgeDb,

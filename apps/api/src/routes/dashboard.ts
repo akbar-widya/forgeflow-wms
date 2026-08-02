@@ -11,6 +11,7 @@ import {
 import { getDb } from "../db";
 import { authRequired } from "../middleware/auth-required";
 import type { AppEnv } from "../types";
+import { unreadCount } from "../services/notification-service";
 
 export const dashboardRoutes = new Hono<AppEnv>();
 
@@ -60,7 +61,7 @@ dashboardRoutes.get("/dashboard/kpis", authRequired, async (c) => {
     lowStockCount,
     openPoCount: Number(openPoRow?.value ?? 0),
     openJobCount: Number(openJobRow?.value ?? 0),
-    unreadNotificationCount: 0
+    unreadNotificationCount: await unreadCount(db, c.get("authUserId"))
   });
 });
 

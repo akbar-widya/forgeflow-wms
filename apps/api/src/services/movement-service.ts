@@ -3,6 +3,7 @@ import { type BatchItem } from "drizzle-orm/batch";
 import {
   stockBalance,
   stockMovement,
+  item,
   itemLot,
   type ForgeDb,
   type StockMovementInsert
@@ -13,6 +14,7 @@ import type {
   StockStatus
 } from "@forgeflow/contracts";
 import { badRequest, conflict } from "../lib/http";
+import { buildStockShortageNotificationStatement } from "./notification-service";
 
 export type MovementCommand = {
   db: ForgeDb;
@@ -27,6 +29,7 @@ export type MovementCommand = {
   referenceType: ReferenceType;
   referenceId?: string | null;
   performedBy?: string | null;
+  authUserId?: string | null;
   occurredAt?: number;
 };
 
@@ -73,9 +76,32 @@ async function findBalance(
 
 export type MovementStatementBundle = {
   movementId: string;
+  newOnHand: number;
   movementStmt: BatchItem<"sqlite">;
   balanceStmt: BatchItem<"sqlite">;
 };
+
+/**
+ * Build a critical "stock shortage" notification statement when a movement
+ * drains an item to zero on-hand, keyed to the acting auth user. Returns null
+ * when there is still stock or no user context is available.
+ */
+async function maybeShortageStatement(
+  db: ForgeDb,
+  authUserId: string | null | undefined,
+  itemId: string,
+  movementId: string,
+  onHandQty: number
+): Promise<BatchItem<"sqlite"> | null> {
+  if (!authUserId || onHandQty > 0) return null;
+  const it = await db.select().from(item).where(eq(item.id, itemId)).get();
+  return buildStockShortageNotificationStatement(db, {
+    authUserId,
+    movementId,
+    itemLabel: it ? `${it.sku} (${it.name})` : itemId,
+    onHandQty
+  });
+}
 
 /**
  * Prepare the ledger + balance statements for a single-location movement without
@@ -150,6 +176,7 @@ export function buildSingleLocationMovementStatements(
 
   return {
     movementId,
+    newOnHand,
     movementStmt: db.insert(stockMovement).values(movement),
     balanceStmt: existing
       ? db
@@ -200,10 +227,20 @@ export async function applySingleLocationMovement(
     rest.lotId
   );
 
-  const { movementId, movementStmt, balanceStmt } =
+  const { movementId, movementStmt, balanceStmt, newOnHand } =
     buildSingleLocationMovementStatements(db, rest, existing);
 
-  await db.batch([movementStmt, balanceStmt]);
+  const stmts: BatchItem<"sqlite">[] = [movementStmt, balanceStmt];
+  const shortage = await maybeShortageStatement(
+    db,
+    rest.authUserId,
+    rest.itemId,
+    movementId,
+    newOnHand
+  );
+  if (shortage) stmts.push(shortage);
+
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 
   return movementId;
 }
@@ -225,6 +262,7 @@ export async function applyTransferMovement(cmd: MovementCommand): Promise<strin
     referenceType,
     referenceId,
     performedBy,
+    authUserId,
     occurredAt
   } = cmd;
 
@@ -257,7 +295,7 @@ export async function applyTransferMovement(cmd: MovementCommand): Promise<strin
   const sourceOnHand = source!.onHandQty - qtyDelta;
   const targetOnHand = (target?.onHandQty ?? 0) + qtyDelta;
 
-  await db.batch([
+  const stmts: BatchItem<"sqlite">[] = [
     db.insert(stockMovement).values({
       id: movementId,
       warehouseId,
@@ -298,7 +336,18 @@ export async function applyTransferMovement(cmd: MovementCommand): Promise<strin
           stockStatus: "available",
           updatedAt: now
         })
-  ]);
+  ];
+
+  const shortage = await maybeShortageStatement(
+    db,
+    authUserId,
+    itemId,
+    movementId,
+    sourceOnHand
+  );
+  if (shortage) stmts.push(shortage);
+
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 
   return movementId;
 }

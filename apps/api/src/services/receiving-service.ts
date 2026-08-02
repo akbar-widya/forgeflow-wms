@@ -26,7 +26,7 @@ import {
   buildSingleLocationMovementStatements,
   ensureLot
 } from "./movement-service";
-import { createNotification } from "./notification-service";
+import { createNotification, buildPoDiscrepancyNotificationStatement } from "./notification-service";
 
 export async function buildReceiptLineDto(
   db: ForgeDb,
@@ -241,7 +241,8 @@ export async function inspectReceiptLine(
 export async function postReceipt(
   db: ForgeDb,
   receiptId: string,
-  staffId: string
+  staffId: string,
+  authUserId: string
 ): Promise<Receipt> {
   const r = await db
     .select()
@@ -313,6 +314,11 @@ export async function postReceipt(
       .select()
       .from(purchaseOrderLine)
       .where(eq(purchaseOrderLine.purchaseOrderId, r.purchaseOrderId));
+    const poRow = await db
+      .select({ poNumber: purchaseOrder.poNumber })
+      .from(purchaseOrder)
+      .where(eq(purchaseOrder.id, r.purchaseOrderId))
+      .get();
 
     for (const poLine of poLines) {
       const matched = lines.find((l) => l.purchaseOrderLineId === poLine.id);
@@ -324,6 +330,24 @@ export async function postReceipt(
           .update(purchaseOrderLine)
           .set({ receivedQty: newReceived, status })
           .where(eq(purchaseOrderLine.id, poLine.id));
+
+        if (newReceived > poLine.orderedQty) {
+          const it = await db
+            .select()
+            .from(item)
+            .where(eq(item.id, matched.itemId))
+            .get();
+          await createNotification(db, {
+            userId: authUserId,
+            movementId: null,
+            severity: "warning",
+            type: "po_discrepancy",
+            title: "PO over-receipt",
+            message: `${poRow?.poNumber ?? "PO"}: received ${newReceived} × ${
+              it ? `${it.sku} (${it.name})` : matched.itemId
+            } against ${poLine.orderedQty} ordered.`
+          });
+        }
       }
     }
 
@@ -342,7 +366,7 @@ export async function postReceipt(
     const qi = inspectedMap.get(line.id)!;
     if (qi.result === "rejected" && qi.discrepancyCode) {
       await createNotification(db, {
-        userId: r.receivedBy ?? staffId,
+        userId: authUserId,
         movementId: movements[0] ?? null,
         severity: "warning",
         type: "po_discrepancy",
@@ -358,7 +382,8 @@ export async function postReceipt(
 export async function batchPostReceipts(
   db: ForgeDb,
   input: BatchPostReceiptsRequest,
-  staffId: string
+  staffId: string,
+  authUserId: string
 ): Promise<BatchPostReceiptsResponse> {
   const now = Date.now();
 
@@ -448,6 +473,13 @@ export async function batchPostReceipts(
     .from(purchaseOrderLine)
     .where(inArray(purchaseOrderLine.purchaseOrderId, poIds));
   const poLineById = new Map(poLines.map((l) => [l.id, l]));
+
+  const poLineItemIds = [...new Set(poLines.map((l) => l.itemId))];
+  const poItems =
+    poLineItemIds.length > 0
+      ? await db.select().from(item).where(inArray(item.id, poLineItemIds))
+      : [];
+  const itemById = new Map(poItems.map((i) => [i.id, i]));
 
   const stmts: BatchItem<"sqlite">[] = [];
   const createdReceiptIds: string[] = [];
@@ -564,6 +596,18 @@ export async function batchPostReceipts(
         .set({ receivedQty: newReceived, status })
         .where(eq(purchaseOrderLine.id, poLineId))
     );
+    if (newReceived > pl.orderedQty) {
+      const it = itemById.get(pl.itemId);
+      stmts.push(
+        buildPoDiscrepancyNotificationStatement(db, {
+          authUserId,
+          poNumber: poById.get(pl.purchaseOrderId)?.poNumber ?? null,
+          itemLabel: it ? `${it.sku} (${it.name})` : pl.itemId,
+          orderedQty: pl.orderedQty,
+          receivedQty: newReceived
+        })
+      );
+    }
   }
 
   for (const r of input.receipts) {
@@ -588,7 +632,7 @@ export async function batchPostReceipts(
     for (const l of r.lines) {
       if (l.inspectionResult === "rejected" && l.discrepancyCode) {
         await createNotification(db, {
-          userId: staffId,
+          userId: authUserId,
           movementId: null,
           severity: "warning",
           type: "po_discrepancy",

@@ -59,7 +59,7 @@ receivingRoutes.post(
       idempotencyHeader,
       "batch_post_receipts",
       JSON.stringify(input),
-      () => batchPostReceipts(db, input, staffId)
+      () => batchPostReceipts(db, input, staffId, c.get("authUserId"))
     );
     return c.json(result, 201);
   }
@@ -103,7 +103,7 @@ receivingRoutes.post(
       idempotencyHeader,
       "post_receipt",
       id,
-      () => postReceipt(db, id, staffId)
+      () => postReceipt(db, id, staffId, c.get("authUserId"))
     );
     return c.json(result);
   }

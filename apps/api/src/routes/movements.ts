@@ -156,6 +156,7 @@ movementRoutes.post(
           referenceType: "adjustment",
           referenceId: null,
           performedBy: staffId,
+          authUserId: c.get("authUserId"),
           occurredAt: Date.now()
         });
         return { movementId };
@@ -200,6 +201,7 @@ movementRoutes.post(
           movementType: "transfer",
           referenceType: "transfer",
           performedBy: staffId,
+          authUserId: c.get("authUserId"),
           occurredAt: Date.now()
         });
         return { movementId };

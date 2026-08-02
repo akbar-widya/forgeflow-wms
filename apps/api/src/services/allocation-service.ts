@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type BatchItem } from "drizzle-orm/batch";
 import {
   job,
@@ -21,7 +21,10 @@ import {
   buildSingleLocationMovementStatements,
   type BalanceProjection
 } from "./movement-service";
-import { createNotification } from "./notification-service";
+import {
+  buildStockShortageNotificationStatement,
+  createNotification
+} from "./notification-service";
 
 export async function previewIssues(
   db: ForgeDb,
@@ -95,7 +98,8 @@ export async function createIssues(
   db: ForgeDb,
   jobId: string,
   input: CreateIssuesRequest,
-  staffId: string
+  staffId: string,
+  authUserId: string
 ): Promise<IssuePreviewResponse> {
   const j = await db.select().from(job).where(eq(job.id, jobId)).get();
   if (!j) notFound("Job not found");
@@ -108,6 +112,13 @@ export async function createIssues(
     .from(jobBomLine)
     .where(eq(jobBomLine.jobId, jobId));
   const lineById = new Map(bomLines.map((l) => [l.id, l]));
+
+  const itemIds = [...new Set(bomLines.map((l) => l.itemId))];
+  const items =
+    itemIds.length > 0
+      ? await db.select().from(item).where(inArray(item.id, itemIds))
+      : [];
+  const itemById = new Map(items.map((i) => [i.id, i]));
 
   const now = Date.now();
   const stmts: BatchItem<"sqlite">[] = [];
@@ -175,6 +186,18 @@ export async function createIssues(
     stmts.push(movementStmt, balanceStmt);
     issuedDelta.set(bomLine.id, (issuedDelta.get(bomLine.id) ?? 0) + req.issueQty);
 
+    if (next.onHandQty <= 0) {
+      const it = itemById.get(bomLine.itemId);
+      stmts.push(
+        buildStockShortageNotificationStatement(db, {
+          authUserId,
+          movementId,
+          itemLabel: it ? `${it.sku} (${it.name})` : bomLine.itemId,
+          onHandQty: next.onHandQty
+        })!
+      );
+    }
+
     stmts.push(
       db.insert(jobIssue).values({
         id: crypto.randomUUID(),
@@ -223,7 +246,8 @@ export async function createScrapReturn(
   db: ForgeDb,
   jobId: string,
   input: ScrapReturnRequest,
-  staffId: string
+  staffId: string,
+  authUserId: string
 ): Promise<{ movementId: string }> {
   const j = await db.select().from(job).where(eq(job.id, jobId)).get();
   if (!j) notFound("Job not found");
@@ -255,7 +279,7 @@ export async function createScrapReturn(
   });
 
   await createNotification(db, {
-    userId: staffId,
+    userId: authUserId,
     movementId,
     severity: "info",
     type: "system",

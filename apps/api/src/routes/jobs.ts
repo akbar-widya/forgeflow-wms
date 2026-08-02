@@ -218,7 +218,7 @@ jobRoutes.post(
       idempotencyHeader,
       "create_job_issues",
       JSON.stringify({ jobId, ...input }),
-      () => createIssues(db, jobId, input, staffId)
+      () => createIssues(db, jobId, input, staffId, c.get("authUserId"))
     );
     return c.json(result);
   }
@@ -240,7 +240,7 @@ jobRoutes.post(
       idempotencyHeader,
       "create_scrap_return",
       JSON.stringify({ jobId, ...input }),
-      () => createScrapReturn(db, jobId, input, staffId)
+      () => createScrapReturn(db, jobId, input, staffId, c.get("authUserId"))
     );
     return c.json(result, 201);
   }
