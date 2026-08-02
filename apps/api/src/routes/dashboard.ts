@@ -4,6 +4,7 @@ import {
   item,
   stockBalance,
   warehouse,
+  location,
   purchaseOrder,
   job,
   type ForgeDb
@@ -77,27 +78,37 @@ dashboardRoutes.get("/dashboard/capacity", authRequired, async (c) => {
     byWarehouse.set(b.warehouseId, (byWarehouse.get(b.warehouseId) ?? 0) + b.onHandQty);
   }
 
+  const locations = await db.select().from(location);
+  const capByWarehouse = new Map<string, number>();
+  for (const l of locations) {
+    if (l.capacityQty != null) {
+      capByWarehouse.set(l.warehouseId, (capByWarehouse.get(l.warehouseId) ?? 0) + l.capacityQty);
+    }
+  }
+
   const warehouses = await db.select().from(warehouse);
 
   const slices = warehouses.map((w) => {
     const onHandQty = byWarehouse.get(w.id) ?? 0;
+    const capacityQty = capByWarehouse.get(w.id) ?? 0;
     return {
       warehouseId: w.id,
       warehouseCode: w.code,
       warehouseName: w.name,
-      capacityQty: 0,
+      capacityQty,
       onHandQty,
-      utilizationPct: 0
+      utilizationPct: capacityQty > 0 ? Math.min(100, (onHandQty / capacityQty) * 100) : 0
     };
   });
 
   const totalOnHand = slices.reduce((sum, s) => sum + s.onHandQty, 0);
+  const totalCapacity = slices.reduce((sum, s) => sum + s.capacityQty, 0);
 
   return c.json({
     warehouses: slices,
-    totalCapacity: 0,
+    totalCapacity,
     totalOnHand,
-    overallUtilizationPct: 0
+    overallUtilizationPct: totalCapacity > 0 ? Math.min(100, (totalOnHand / totalCapacity) * 100) : 0
   });
 });
 
