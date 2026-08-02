@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { getAuth } from "./auth";
 import { validateEnv, type WorkerEnv } from "./env";
 import { errorHandler, logRequests } from "./middleware/error-handler";
+import { analyticsRoutes } from "./routes/analytics";
 import { healthRoutes } from "./routes/health";
 import { authRoutes } from "./routes/auth";
 import { dashboardRoutes } from "./routes/dashboard";
@@ -29,6 +30,7 @@ app.use(
 );
 app.onError(errorHandler);
 
+app.route("/api", analyticsRoutes);
 app.route("/api", healthRoutes);
 app.route("/api", authRoutes);
 app.route("/api", dashboardRoutes);

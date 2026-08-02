@@ -32,6 +32,23 @@ export const capacityResponseSchema = z.object({
 
 export type CapacityResponse = z.infer<typeof capacityResponseSchema>;
 
+export const movementTrendPointSchema = z.object({
+  date: z.string(),
+  label: z.string(),
+  inbound: z.number(),
+  outbound: z.number()
+});
+
+export type MovementTrendPoint = z.infer<typeof movementTrendPointSchema>;
+
+export const movementTrendResponseSchema = z.object({
+  days: z.array(movementTrendPointSchema),
+  totalInbound: z.number(),
+  totalOutbound: z.number()
+});
+
+export type MovementTrendResponse = z.infer<typeof movementTrendResponseSchema>;
+
 export const inventorySummaryResponseSchema = z.object({
   items: z.array(
     z.object({
