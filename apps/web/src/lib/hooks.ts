@@ -27,6 +27,7 @@ import type {
   Location,
   LocationListResponse,
   MovementListResponse,
+  MovementTrendResponse,
   Notification,
   NotificationListResponse,
   PurchaseOrder,
@@ -66,6 +67,13 @@ export function useInventorySummary() {
   return useQuery({
     queryKey: ["dashboard", "inventory-summary"],
     queryFn: () => apiGet<InventorySummaryResponse>("/api/dashboard/inventory-summary")
+  });
+}
+
+export function useMovementTrend() {
+  return useQuery({
+    queryKey: ["dashboard", "movement-trend"],
+    queryFn: () => apiGet<MovementTrendResponse>("/api/analytics/movements")
   });
 }
 

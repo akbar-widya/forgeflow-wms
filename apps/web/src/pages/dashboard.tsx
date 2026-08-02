@@ -1,13 +1,21 @@
 import { Link } from "react-router-dom";
 import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   Boxes,
   Warehouse as WarehouseIcon,
   PackageSearch,
-  AlertTriangle,
   FileText,
   ClipboardList
 } from "lucide-react";
-import { useCapacity, useInventorySummary, useKpis } from "@/lib/hooks";
+import {
+  useCapacity,
+  useInventorySummary,
+  useKpis,
+  useMovementTrend
+} from "@/lib/hooks";
+import { MovementTrendChart } from "@/components/movement-trend-chart";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,6 +63,7 @@ export function DashboardPage() {
   const { data: kpis, isLoading: kpisLoading } = useKpis();
   const { data: capacity } = useCapacity();
   const { data: summary } = useInventorySummary();
+  const { data: trend, isLoading: trendLoading } = useMovementTrend();
 
   return (
     <div>
@@ -104,8 +113,53 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-5">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Movements trend</CardTitle>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block size-2 bg-success" />
+                  Inbound
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block size-2 bg-danger" />
+                  Outbound
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {trendLoading || !trend ? (
+              <Skeleton className="h-[280px] w-full" />
+            ) : (
+              <>
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <ArrowDownRight className="size-4 text-success" />
+                    <span className="text-muted-foreground">Total inbound</span>
+                    <span className="font-mono font-semibold text-success">
+                      {formatNumber(trend.totalInbound)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ArrowUpRight className="size-4 text-danger" />
+                    <span className="text-muted-foreground">Total outbound</span>
+                    <span className="font-mono font-semibold text-danger">
+                      {formatNumber(trend.totalOutbound)}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <MovementTrendChart data={trend} />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">Warehouse capacity</CardTitle>
           </CardHeader>
@@ -113,38 +167,64 @@ export function DashboardPage() {
             {!capacity ? (
               <Skeleton className="h-40 w-full" />
             ) : (
-              <div className="space-y-4">
-                {capacity.warehouses.length === 0 && (
-                  <div className="text-sm text-muted-foreground">No warehouses yet.</div>
-                )}
-                {capacity.warehouses.map((w) => {
-                  const pct = Math.min(100, Math.round(w.utilizationPct));
-                  return (
-                    <div key={w.warehouseId}>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{w.warehouseCode}</span>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {formatNumber(w.onHandQty)} on-hand
-                        </span>
-                      </div>
-                      <div className="mt-1 h-2 w-full rounded-none bg-secondary">
-                        <div
-                          className="h-2 bg-primary"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="mt-1 text-right font-mono text-[11px] text-muted-foreground">
-                        {pct}% utilized
-                      </div>
+              <>
+                <div className="flex items-end justify-between border-b border-border pb-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Overall utilization
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="font-mono text-2xl font-semibold">
+                      {Math.round(capacity.overallUtilizationPct)}%
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <div className="font-mono">{formatNumber(capacity.totalOnHand)}</div>
+                    <div>of {formatNumber(capacity.totalCapacity)} capacity</div>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-4">
+                  {capacity.warehouses.length === 0 && (
+                    <div className="text-sm text-muted-foreground">No warehouses yet.</div>
+                  )}
+                  {capacity.warehouses.map((w) => {
+                    const pct = Math.round(Math.min(100, w.utilizationPct));
+                    const barColor =
+                      pct >= 85 ? "bg-danger" : pct >= 60 ? "bg-warning" : "bg-success";
+                    return (
+                      <div key={w.warehouseId}>
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {w.warehouseCode}
+                            </span>
+                            <span className="truncate font-medium">{w.warehouseName}</span>
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {formatNumber(w.onHandQty)} / {formatNumber(w.capacityQty)}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-full bg-secondary">
+                          <div
+                            className={`h-1.5 ${barColor}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>capacity</span>
+                          <span className="font-mono font-medium">{pct}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="xl:col-span-3">
+      <div className="mt-6">
+        <Card className="w-full">
           <CardHeader>
             <CardTitle className="text-base">Inventory summary</CardTitle>
           </CardHeader>
