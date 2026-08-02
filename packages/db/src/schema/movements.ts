@@ -23,6 +23,8 @@ export const stockMovement = sqliteTable("stock_movement", {
     enum: ["receipt", "job_issue", "adjustment", "transfer", "scrap_return", "correction"]
   }).notNull(),
   referenceId: text("reference_id"),
-  performedBy: text("performed_by").references(() => staffProfile.id),
+  performedBy: text("performed_by").references(() => staffProfile.id, {
+    onDelete: "set null"
+  }),
   occurredAt: integer("occurred_at").notNull()
 });
