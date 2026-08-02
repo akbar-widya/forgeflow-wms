@@ -36,6 +36,14 @@ const STOCK_MAP: StatusMap = {
   reserved: "info"
 };
 
+const BOM_MAP: StatusMap = {
+  pending: "secondary",
+  partial: "warning",
+  allocated: "info",
+  issued: "success",
+  closed: "secondary"
+};
+
 const INSPECTION_MAP: StatusMap = {
   pending: "secondary",
   accepted: "success",
@@ -68,6 +76,8 @@ const LABELS: Record<string, string> = {
   received: "Received",
   closed: "Closed",
   cancelled: "Cancelled",
+  partial: "Partial",
+  issued: "Issued",
   planned: "Planned",
   allocated: "Allocated",
   in_progress: "In progress",
@@ -95,6 +105,8 @@ function pickMap(kind: string): StatusMap {
       return PO_MAP;
     case "job":
       return JOB_MAP;
+    case "bom":
+      return BOM_MAP;
     case "stock":
       return STOCK_MAP;
     case "inspection":
@@ -112,7 +124,7 @@ export function StatusBadge({
   kind,
   value
 }: {
-  kind: "movement" | "po" | "job" | "stock" | "inspection" | "receipt" | "severity";
+  kind: "movement" | "po" | "job" | "bom" | "stock" | "inspection" | "receipt" | "severity";
   value: string;
 }) {
   const map = pickMap(kind);

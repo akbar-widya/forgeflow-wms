@@ -285,6 +285,12 @@ function AllocateDialog({
       toast.error("Choose a lot/location and enter a quantity");
       return;
     }
+    if (qty > maxQty) {
+      toast.error(
+        `Only ${formatNumber(Math.max(0, maxQty))} units remain allocatable for this line`
+      );
+      return;
+    }
     onAdd({
       key: `${line.id}:${selectedBalance.id}`,
       balanceId: selectedBalance.id,
@@ -359,7 +365,9 @@ function AllocateDialog({
               </div>
               <Button
                 onClick={add}
-                disabled={!selectedBalance || qty <= 0 || maxQty <= 0}
+                disabled={
+                  !selectedBalance || qty <= 0 || maxQty <= 0 || qty > maxQty
+                }
               >
                 <Plus data-icon="inline-start" />
                 Add allocation
@@ -552,30 +560,30 @@ function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
               </thead>
               <tbody>
                 {job.bomLines.map((line) => {
-                  const remaining = line.requiredQty - line.issuedQty;
+                  const requiredQty = line.requiredQty;
+                  const remainingIssued = Math.max(0, requiredQty - line.issuedQty);
                   const allocatedInCart = allocations
                     .filter((a) => a.bomLineId === line.id)
                     .reduce((s, a) => s + a.qty, 0);
-                  const fullyIssued = remaining <= 0;
+                  const remaining = Math.max(0, remainingIssued - allocatedInCart);
+                  const lineStatus =
+                    remainingIssued <= 0
+                      ? "issued"
+                      : allocatedInCart >= remainingIssued
+                        ? "allocated"
+                        : line.issuedQty > 0 || allocatedInCart > 0
+                          ? "partial"
+                          : "pending";
                   return (
                     <tr key={line.id}>
                       <td className="font-mono text-xs">{line.sku}</td>
                       <td className="font-medium">{line.itemName}</td>
-                      <td className="text-right font-mono">{formatNumber(line.requiredQty)}</td>
+                      <td className="text-right font-mono">{formatNumber(requiredQty)}</td>
                       <td className="text-right font-mono">{formatNumber(line.issuedQty)}</td>
                       <td className="text-right font-mono">{formatNumber(allocatedInCart)}</td>
-                      <td className="text-right font-mono">{formatNumber(Math.max(0, remaining))}</td>
+                      <td className="text-right font-mono">{formatNumber(remaining)}</td>
                       <td>
-                        <StatusBadge
-                          kind="stock"
-                          value={
-                            fullyIssued
-                              ? "available"
-                              : line.issuedQty > 0
-                                ? "low"
-                                : "out_of_stock"
-                          }
-                        />
+                        <StatusBadge kind="bom" value={lineStatus} />
                       </td>
                       <td className="text-right">
                         <Button
