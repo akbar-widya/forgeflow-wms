@@ -412,7 +412,6 @@ function AllocateDialog({
 }
 
 function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
-  const navigate = useNavigate();
   const { data: job } = useJob(jobId);
   const { data: balancesData } = useStockBalances({
     warehouseId: job?.warehouseId,
@@ -453,7 +452,7 @@ function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
   }
 
   async function handleIssueMaterials() {
-    if (allocations.length === 0) return;
+    if (allocations.length === 0 || !job) return;
     setSubmitting(true);
     try {
       await createIssues.mutateAsync({

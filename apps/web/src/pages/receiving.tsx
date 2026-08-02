@@ -35,7 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDate, formatNumber } from "@/lib/utils";
-import type { PurchaseOrder } from "@forgeflow/contracts";
+import type { DiscrepancyCode, PurchaseOrder } from "@forgeflow/contracts";
 
 const createPoSchema = z.object({
   warehouseId: z.string().min(1, "Select a warehouse"),
@@ -819,8 +819,8 @@ export function ReceivingPage() {
     try {
       const result = await batchPost.mutateAsync({
         receipts: Array.from(byPo.values()).map((lines) => ({
-          warehouseId: lines[0].warehouseId,
-          purchaseOrderId: lines[0].purchaseOrderId,
+          warehouseId: lines[0]!.warehouseId,
+          purchaseOrderId: lines[0]!.purchaseOrderId,
           lines: lines.map((l) => ({
             purchaseOrderLineId: l.purchaseOrderLineId,
             itemId: l.itemId,
@@ -833,7 +833,7 @@ export function ReceivingPage() {
             discrepancyCode:
               l.inspectionResult === "accepted"
                 ? undefined
-                : l.discrepancyCode || undefined
+                : (l.discrepancyCode || undefined) as DiscrepancyCode | undefined
           }))
         }))
       });
