@@ -1,12 +1,19 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
+import type { BatchItem } from "drizzle-orm/batch";
 import {
   authUser,
   authAccount,
   authSession,
   authVerification,
-  staffProfile
+  staffProfile,
+  warehouse,
+  zone,
+  location,
+  item,
+  stockMovement,
+  notification
 } from "@forgeflow/db";
 import type { ForgeDb } from "@forgeflow/db";
 import { getDb } from "../db";
@@ -118,12 +125,216 @@ async function seedDemoUsers(db: ForgeDb) {
   return results;
 }
 
+async function seedDemoMovements(db: ForgeDb) {
+  await db.delete(notification);
+  await db.delete(stockMovement);
+
+  const now = Date.now();
+  const existingWarehouses = await db.select().from(warehouse).all();
+  if (existingWarehouses.length === 0) {
+    await db.insert(warehouse).values([
+      {
+        id: crypto.randomUUID(),
+        code: "WH-DEMO-01",
+        name: "Demo Warehouse A",
+        status: "active",
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: crypto.randomUUID(),
+        code: "WH-DEMO-02",
+        name: "Demo Warehouse B",
+        status: "active",
+        createdAt: now,
+        updatedAt: now
+      }
+    ]);
+  }
+
+  const warehouses = await db.select().from(warehouse).all();
+
+  const existingZones = await db.select().from(zone).all();
+  if (existingZones.length === 0) {
+    await db
+      .insert(zone)
+      .values(
+        warehouses.map(
+          (w): typeof zone.$inferInsert => ({
+            id: crypto.randomUUID(),
+            warehouseId: w.id,
+            code: "Z-DEMO",
+            name: "Demo Zone",
+            type: "storage",
+            status: "active"
+          })
+        )
+      );
+  }
+
+  const zones = await db.select().from(zone).all();
+
+  const existingLocations = await db.select().from(location).all();
+  if (existingLocations.length === 0) {
+    const locationValues: (typeof location.$inferInsert)[] = [];
+    for (const w of warehouses) {
+      const zoneForWarehouse = zones.find((z) => z.warehouseId === w.id);
+      if (!zoneForWarehouse) continue;
+      const index = locationValues.length / 2;
+      locationValues.push(
+        {
+          id: crypto.randomUUID(),
+          warehouseId: w.id,
+          zoneId: zoneForWarehouse.id,
+          code: `LOC-DEMO-0${index * 2 + 1}`,
+          locationType: "rack",
+          capacityQty: 5000,
+          status: "active"
+        },
+        {
+          id: crypto.randomUUID(),
+          warehouseId: w.id,
+          zoneId: zoneForWarehouse.id,
+          code: `LOC-DEMO-0${index * 2 + 2}`,
+          locationType: "rack",
+          capacityQty: 5000,
+          status: "active"
+        }
+      );
+    }
+    await db.insert(location).values(locationValues);
+  }
+
+  const locations = await db.select().from(location).all();
+
+  const existingItems = await db.select().from(item).all();
+  if (existingItems.length === 0) {
+    await db.insert(item).values([
+      {
+        id: crypto.randomUUID(),
+        sku: "SKU-DEMO-001",
+        name: "Demo Component A",
+        uom: "pcs",
+        category: "components",
+        lotTracked: false,
+        expiryTracked: false,
+        serialTracked: false,
+        reorderPoint: 50,
+        status: "active",
+        createdAt: now
+      },
+      {
+        id: crypto.randomUUID(),
+        sku: "SKU-DEMO-002",
+        name: "Demo Component B",
+        uom: "pcs",
+        category: "components",
+        lotTracked: false,
+        expiryTracked: false,
+        serialTracked: false,
+        reorderPoint: 50,
+        status: "active",
+        createdAt: now
+      },
+      {
+        id: crypto.randomUUID(),
+        sku: "SKU-DEMO-003",
+        name: "Demo Component C",
+        uom: "pcs",
+        category: "components",
+        lotTracked: false,
+        expiryTracked: false,
+        serialTracked: false,
+        reorderPoint: 50,
+        status: "active",
+        createdAt: now
+      },
+      {
+        id: crypto.randomUUID(),
+        sku: "SKU-DEMO-004",
+        name: "Demo Component D",
+        uom: "pcs",
+        category: "components",
+        lotTracked: false,
+        expiryTracked: false,
+        serialTracked: false,
+        reorderPoint: 50,
+        status: "active",
+        createdAt: now
+      }
+    ]);
+  }
+
+  const items = await db.select().from(item).all();
+  const staff = await db.select().from(staffProfile).all();
+  const performedBy = staff[0]?.id ?? null;
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const startOfDay = (d: Date): number =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  const daily = [
+    { inbound: 240, outbound: 120 },
+    { inbound: 180, outbound: 210 },
+    { inbound: 320, outbound: 150 },
+    { inbound: 150, outbound: 260 },
+    { inbound: 270, outbound: 90 },
+    { inbound: 210, outbound: 180 },
+    { inbound: 190, outbound: 230 }
+  ];
+
+  const stmts: BatchItem<"sqlite">[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const dayStart = startOfDay(new Date()) - (6 - i) * DAY_MS;
+
+    stmts.push(
+      db.insert(stockMovement).values({
+        id: crypto.randomUUID(),
+        warehouseId: warehouses[i % warehouses.length]!.id,
+        itemId: items[i % items.length]!.id,
+        lotId: null,
+        fromLocationId: null,
+        toLocationId: locations[i % locations.length]!.id,
+        qtyDelta: daily[i]!.inbound,
+        movementType: "receive",
+        referenceType: "receipt",
+        referenceId: null,
+        performedBy,
+        occurredAt: dayStart + 8 * 3600 * 1000 + 30 * 60 * 1000
+      })
+    );
+
+    stmts.push(
+      db.insert(stockMovement).values({
+        id: crypto.randomUUID(),
+        warehouseId: warehouses[i % warehouses.length]!.id,
+        itemId: items[(i + 1) % items.length]!.id,
+        lotId: null,
+        fromLocationId: locations[(i + 1) % locations.length]!.id,
+        toLocationId: null,
+        qtyDelta: -daily[i]!.outbound,
+        movementType: "issue",
+        referenceType: "job_issue",
+        referenceId: null,
+        performedBy,
+        occurredAt: dayStart + 13 * 3600 * 1000 + 15 * 60 * 1000
+      })
+    );
+  }
+
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+
+  return stmts.length;
+}
+
 export const seedRoutes = new Hono<AppEnv>();
 
 seedRoutes.post("/seed", async (c) => {
   const db = getDb(c.env);
   const results = await seedDemoUsers(db);
-  return c.json({ seeded: results });
+  const movements = await seedDemoMovements(db);
+  return c.json({ seeded: results, movements });
 });
 
 seedRoutes.get("/seed/status", async (c) => {
