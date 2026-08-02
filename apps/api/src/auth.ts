@@ -8,6 +8,7 @@ let authCache: ReturnType<typeof createAuth> | null = null;
 
 export function createAuth(env: WorkerEnv) {
   const db = getDb(env);
+  const isProduction = env.ENVIRONMENT === "production";
   return betterAuth({
     appName: "ForgeFlow WMS",
     baseURL: env.BETTER_AUTH_URL,
@@ -27,9 +28,9 @@ export function createAuth(env: WorkerEnv) {
     },
     advanced: {
       cookiePrefix: "forgeflow",
-      useSecureCookies: false,
+      useSecureCookies: isProduction,
       defaultCookieAttributes: {
-        sameSite: "lax"
+        sameSite: isProduction ? "none" : "lax"
       }
     }
   });

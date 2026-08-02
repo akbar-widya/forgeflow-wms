@@ -19,5 +19,20 @@
       "migrations_dir": "../../packages/db/migrations"
     }
   ],
-  "pages_build_output_dir": "../web/dist"
+  "env": {
+    "production": {
+      "vars": {
+        "ENVIRONMENT": "production",
+        "TRUSTED_ORIGINS": "https://forgeflow-web.pages.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "forgeflow-prod",
+          "database_id": "aa0326a6-d92f-4fb7-81e4-5b92d0e1d590",
+          "migrations_dir": "../../packages/db/migrations"
+        }
+      ]
+    }
+  },
 }

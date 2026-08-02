@@ -21,12 +21,22 @@ const app = new Hono<{ Bindings: WorkerEnv }>();
 app.use("*", logRequests);
 app.use(
   "*",
-  cors({
-    origin: (origin) => origin,
-    credentials: true,
-    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"]
-  })
+  async (c, next) => {
+    const trustedOrigins = (c.env.TRUSTED_ORIGINS ?? "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    const corsMiddleware = cors({
+      origin: (origin) =>
+        trustedOrigins.length === 0 || trustedOrigins.includes(origin)
+          ? origin
+          : undefined,
+      credentials: true,
+      allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization", "Idempotency-Key"]
+    });
+    return corsMiddleware(c, next);
+  }
 );
 app.onError(errorHandler);
 
@@ -42,6 +52,8 @@ app.route("/api", jobRoutes);
 app.route("/api", movementRoutes);
 app.route("/api", notificationRoutes);
 app.route("/api", seedRoutes);
+
+app.all("/api/auth/*", (c) => getAuth(c.env).handler(c.req.raw));
 
 app.notFound((c) =>
   c.json(
@@ -62,10 +74,6 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     validateEnv(env);
-
-    if (request.url.includes("/api/auth")) {
-      return getAuth(env).handler(request);
-    }
 
     return app.fetch(request, env, ctx);
   }

@@ -8,10 +8,15 @@ import { unauthorized } from "../lib/http";
 import type { WorkerEnv } from "../env";
 import type { AppEnv } from "../types";
 
-const PUBLIC_PATHS = ["/api/seed", "/api/seed/status"];
+const PUBLIC_PATH_PREFIXES = ["/api/auth", "/api/health", "/api/seed"];
 
 export const authRequired = createMiddleware<AppEnv>(async (c, next) => {
-  if (PUBLIC_PATHS.includes(new URL(c.req.url).pathname)) {
+  const pathname = new URL(c.req.url).pathname;
+  if (
+    PUBLIC_PATH_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    )
+  ) {
     return next();
   }
 
