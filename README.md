@@ -236,4 +236,5 @@ ForgeFlow WMS is built to behave like a piece of internal corporate software —
 
 ## License
 
-This project is a private portfolio showcase and is not licensed for reuse or redistribution.
+Copyright © 2026 Akbar Widya. All rights reserved. 
+No part of this project may be copied, distributed, or reproduced in any form without prior written permission.

@@ -66,6 +66,9 @@ export function Sidebar() {
         <div className="text-[11px] text-muted-foreground">
           Cloudflare D1 · SQLite
         </div>
+        <div className="mt-1 text-[10px] text-muted-foreground/70">
+          © 2026 Akbar Widya. All rights reserved.
+        </div>
       </div>
     </aside>
   );
