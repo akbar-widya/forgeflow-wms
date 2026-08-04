@@ -35,6 +35,7 @@ import {
   TabsList,
   TabsTrigger
 } from "@/components/ui/tabs";
+import { ErrorState } from "@/components/error-state";
 import { formatDate, formatNumber } from "@/lib/utils";
 
 const warehouseSchema = z.object({
@@ -425,7 +426,7 @@ function ZoneForm() {
           status: values.status
         }
       });
-      const wh = warehouses?.items.find((w) => w.id === values.warehouseId);
+      const wh = (warehouses?.items ?? []).find((w) => w.id === values.warehouseId);
       toast.success(`Zone ${values.code} created in ${wh?.code ?? ""}`);
       reset({
         warehouseId: values.warehouseId,
@@ -725,7 +726,7 @@ function LocationForm() {
 }
 
 function ZonesTable() {
-  const { data, isLoading } = useZones();
+  const { data, isLoading, error } = useZones();
   const rows = data?.items ?? [];
 
   return (
@@ -734,6 +735,12 @@ function ZonesTable() {
         <CardTitle className="text-base">Zones</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        {error ? (
+          <ErrorState
+            title="Failed to load zones"
+            message={error instanceof Error ? error.message : undefined}
+          />
+        ) : (
         <div className="max-h-[360px] overflow-auto">
           <table className="data-table">
             <thead>
@@ -768,13 +775,14 @@ function ZonesTable() {
             </tbody>
           </table>
         </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function LocationsTable() {
-  const { data, isLoading } = useLocations();
+  const { data, isLoading, error } = useLocations();
   const rows = data?.items ?? [];
 
   return (
@@ -783,6 +791,12 @@ function LocationsTable() {
         <CardTitle className="text-base">Locations</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        {error ? (
+          <ErrorState
+            title="Failed to load locations"
+            message={error instanceof Error ? error.message : undefined}
+          />
+        ) : (
         <div className="max-h-[360px] overflow-auto">
           <table className="data-table">
             <thead>
@@ -821,13 +835,14 @@ function LocationsTable() {
             </tbody>
           </table>
         </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function WarehousesSection() {
-  const { data: warehouses, isLoading: whLoading } = useWarehouses({
+  const { data: warehouses, isLoading: whLoading, error: whError } = useWarehouses({
     pageSize: 100
   });
 
@@ -859,6 +874,12 @@ function WarehousesSection() {
           <CardTitle className="text-base">Warehouses</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {whError ? (
+            <ErrorState
+              title="Failed to load warehouses"
+              message={whError instanceof Error ? whError.message : undefined}
+            />
+          ) : (
           <div className="max-h-[440px] overflow-auto">
             <table className="data-table">
               <thead>
@@ -893,6 +914,7 @@ function WarehousesSection() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -900,7 +922,7 @@ function WarehousesSection() {
 }
 
 function ItemsSection() {
-  const { data: items, isLoading: itemsLoading } = useItems({ pageSize: 100 });
+  const { data: items, isLoading: itemsLoading, error: itemsError } = useItems({ pageSize: 100 });
 
   return (
     <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -918,6 +940,12 @@ function ItemsSection() {
           <CardTitle className="text-base">Items</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {itemsError ? (
+            <ErrorState
+              title="Failed to load items"
+              message={itemsError instanceof Error ? itemsError.message : undefined}
+            />
+          ) : (
           <div className="max-h-[440px] overflow-auto">
             <table className="data-table">
               <thead>
@@ -954,6 +982,7 @@ function ItemsSection() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

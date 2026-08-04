@@ -42,6 +42,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
+import { ErrorState } from "@/components/error-state";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
 import type { JobBomLine, StockBalance } from "@forgeflow/contracts";
 
@@ -436,7 +437,7 @@ function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
     job.status === "in_progress";
   const totalAllocated = allocations.reduce((s, a) => s + a.qty, 0);
   const allocateLine =
-    job.bomLines.find((l) => l.id === allocateLineId) ?? null;
+    (job.bomLines ?? []).find((l) => l.id === allocateLineId) ?? null;
 
   function addAllocation(a: Allocation) {
     setAllocations((prev) => {
@@ -484,7 +485,7 @@ function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
     { label: "Due date", value: formatDate(job.dueDate) },
     { label: "Status", value: <StatusBadge kind="job" value={job.status} /> },
     { label: "Created", value: formatDateTime(job.createdAt) },
-    { label: "BOM lines", value: String(job.bomLines.length) }
+    { label: "BOM lines", value: String(job.bomLines?.length ?? 0) }
   ];
 
   return (
@@ -558,7 +559,7 @@ function JobDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {job.bomLines.map((line) => {
+                {(job.bomLines ?? []).map((line) => {
                   const requiredQty = line.requiredQty;
                   const remainingIssued = Math.max(0, requiredQty - line.issuedQty);
                   const allocatedInCart = allocations
@@ -809,7 +810,7 @@ export function JobAllocationPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const { data: jobs } = useJobs({ pageSize: 100 });
+  const { data: jobs, error: jobsError } = useJobs({ pageSize: 100 });
   const [statusFilter, setStatusFilter] = useState("all");
 
   const filtered = useMemo(() => {
@@ -854,6 +855,12 @@ export function JobAllocationPage() {
 
       <Card>
         <CardContent className="p-0">
+          {jobsError ? (
+            <ErrorState
+              title="Failed to load jobs"
+              message={jobsError instanceof Error ? jobsError.message : undefined}
+            />
+          ) : (
           <table className="data-table">
             <thead>
               <tr>
@@ -876,7 +883,7 @@ export function JobAllocationPage() {
                   <td className="font-mono text-xs">{job.jobNumber}</td>
                   <td className="font-mono text-xs">{job.workOrderRef ?? "—"}</td>
                   <td className="font-mono text-xs">{job.warehouseCode}</td>
-                  <td className="text-right font-mono">{job.bomLines.length}</td>
+                  <td className="text-right font-mono">{job.bomLines?.length ?? 0}</td>
                   <td>
                     <StatusBadge kind="job" value={job.status} />
                   </td>
@@ -906,6 +913,7 @@ export function JobAllocationPage() {
               )}
             </tbody>
           </table>
+          )}
         </CardContent>
       </Card>
 

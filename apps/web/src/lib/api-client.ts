@@ -1,6 +1,6 @@
 import type { ApiError } from "@forgeflow/contracts";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiClientError extends Error {
   constructor(
@@ -21,6 +21,20 @@ async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 204) {
     return undefined as T;
   }
+
+  const contentType = res.headers.get("content-type") ?? "";
+
+  // A JSON API must never return a non-JSON body. This rejects HTML/SPA
+  // fallback responses (e.g. a wrong API base URL that resolves to the static
+  // site) so the caller sees a real error instead of an empty shell.
+  if (!contentType.includes("application/json")) {
+    throw new ApiClientError(
+      res.status,
+      "INVALID_RESPONSE",
+      `Expected JSON but received ${contentType || "unknown content type"} (status ${res.status})`
+    );
+  }
+
   const data = (await res.json().catch(() => ({}))) as T & { error?: ApiError["error"] };
   if (!res.ok) {
     const err = data?.error;

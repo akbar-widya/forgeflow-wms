@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
+import { ErrorState } from "@/components/error-state";
 import { formatDateTime } from "@/lib/utils";
 
 export function NotificationsPage() {
@@ -17,7 +18,7 @@ export function NotificationsPage() {
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
-  const { data, isLoading } = useNotifications({
+  const { data, isLoading, error } = useNotifications({
     pageSize: 50,
     unreadOnly
   });
@@ -69,6 +70,11 @@ export function NotificationsPage() {
             <div className="p-8 text-center text-sm text-muted-foreground">
               Loading notifications...
             </div>
+          ) : error ? (
+            <ErrorState
+              title="Failed to load notifications"
+              message={error instanceof Error ? error.message : undefined}
+            />
           ) : (
             <table className="data-table">
               <thead>

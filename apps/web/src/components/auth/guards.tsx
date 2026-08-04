@@ -38,16 +38,18 @@ export function RequireAuth() {
   const location = useLocation();
   const { status, setAuthenticated, setUnauthenticated } = useAuthStore();
 
-  const { data, error } = useQuery({
+  const { data, error, isLoading } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiGet<MeResponse>("/api/me"),
     retry: false,
     staleTime: 60_000
   });
 
+  const isAuthenticated = Boolean(data?.user);
+
   useEffect(() => {
-    if (data) {
-      const staff = data.user.staffProfile;
+    if (data?.user) {
+      const staff = data.user?.staffProfile;
       setAuthenticated({
         id: data.user.id,
         email: data.user.email,
@@ -64,15 +66,19 @@ export function RequireAuth() {
             }
           : undefined
       });
+    } else {
+      setUnauthenticated();
     }
-    if (error) setUnauthenticated();
   }, [data, error, setAuthenticated, setUnauthenticated]);
 
-  if (status === "loading" && !data) {
+  // Loading: show a full-screen loader while the session is being resolved.
+  if (isLoading && status === "loading") {
     return <FullScreenLoader />;
   }
 
-  if (!data) {
+  // Not authenticated (no user, request failed/unauthorized, or login required):
+  // send the user to the login page instead of rendering an empty shell.
+  if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

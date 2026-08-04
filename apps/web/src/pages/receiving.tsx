@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
+import { ErrorState } from "@/components/error-state";
 import { formatDate, formatNumber } from "@/lib/utils";
 import type { DiscrepancyCode, PurchaseOrder } from "@forgeflow/contracts";
 
@@ -315,7 +316,7 @@ function CreateReceiptDialog({
     const po = openPos.find((p) => p.id === poId);
     if (po) {
       const next: Record<string, ReceiptLineDraft> = {};
-      for (const line of po.lines) {
+      for (const line of po.lines ?? []) {
         next[line.id] = {
           purchaseOrderLineId: line.id,
           itemId: line.itemId,
@@ -747,7 +748,7 @@ function PoDetail({
             </tr>
           </thead>
           <tbody>
-            {po.lines.map((l) => {
+            {(po.lines ?? []).map((l) => {
               const remaining = l.orderedQty - l.receivedQty;
               const lineStatus =
                 remaining <= 0
@@ -784,10 +785,10 @@ export function ReceivingPage() {
   const [staged, setStaged] = useState<StagedLine[]>([]);
   const batchPost = useBatchPostReceipts();
 
-  const { data: pos } = usePurchaseOrders({ pageSize: 100 });
+  const { data: pos, error: posError } = usePurchaseOrders({ pageSize: 100 });
 
   const selectedPo = useMemo(
-    () => pos?.items.find((p) => p.id === selectedPoId) ?? null,
+    () => (pos?.items ?? []).find((p) => p.id === selectedPoId) ?? null,
     [pos, selectedPoId]
   );
 
@@ -838,7 +839,7 @@ export function ReceivingPage() {
         }))
       });
       toast.success(
-        `Posted ${result.movementCount} movement(s) across ${result.receipts.length} receipt(s)`
+        `Posted ${result.movementCount} movement(s) across ${(result.receipts ?? []).length} receipt(s)`
       );
       setStaged([]);
     } catch (err) {
@@ -883,6 +884,12 @@ export function ReceivingPage() {
         <TabsContent value="po-list" className="mt-4">
           <Card>
             <CardContent className="p-0">
+              {posError ? (
+                <ErrorState
+                  title="Failed to load purchase orders"
+                  message={posError instanceof Error ? posError.message : undefined}
+                />
+              ) : (
               <table className="data-table">
                 <thead>
                   <tr>
@@ -905,7 +912,7 @@ export function ReceivingPage() {
                       <td className="font-mono text-xs">{po.poNumber}</td>
                       <td className="font-medium">{po.supplierName}</td>
                       <td className="font-mono text-xs">{po.warehouseCode}</td>
-                      <td className="text-right font-mono">{po.lines.length}</td>
+                      <td className="text-right font-mono">{po.lines?.length ?? 0}</td>
                       <td>
                         <StatusBadge kind="po" value={po.status} />
                       </td>
@@ -943,6 +950,7 @@ export function ReceivingPage() {
                   )}
                 </tbody>
               </table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -12,6 +12,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
+import { ErrorState } from "@/components/error-state";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 
 export function MovementsPage() {
@@ -19,7 +20,7 @@ export function MovementsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useMovements({
+  const { data, isLoading, error } = useMovements({
     page,
     pageSize: 50,
     movementType: typeFilter === "all" ? undefined : typeFilter
@@ -28,8 +29,8 @@ export function MovementsPage() {
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    if (!q) return data.items;
-    return data.items.filter(
+    if (!q) return data.items ?? [];
+    return (data.items ?? []).filter(
       (m) =>
         m.sku.toLowerCase().includes(q) ||
         m.itemName.toLowerCase().includes(q) ||
@@ -73,6 +74,11 @@ export function MovementsPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Loading movements...</div>
+          ) : error ? (
+            <ErrorState
+              title="Failed to load movements"
+              message={error instanceof Error ? error.message : undefined}
+            />
           ) : (
             <table className="data-table">
               <thead>
@@ -128,22 +134,23 @@ export function MovementsPage() {
         </CardContent>
       </Card>
 
-      {data && data.meta.totalPages > 1 && (
+      {(data?.meta?.totalPages ?? 0) > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            {data.meta.total} movements · page {data.meta.page} of {data.meta.totalPages}
+            {data?.meta?.total ?? 0} movements · page {data?.meta?.page ?? 1} of{" "}
+            {data?.meta?.totalPages ?? 1}
           </span>
           <div className="flex gap-2">
             <button
               className="rounded-[4px] border border-border px-3 py-1.5 hover:bg-secondary disabled:opacity-40"
-              disabled={!data.meta.hasPrev}
+              disabled={!data?.meta?.hasPrev}
               onClick={() => setPage((p) => p - 1)}
             >
               Prev
             </button>
             <button
               className="rounded-[4px] border border-border px-3 py-1.5 hover:bg-secondary disabled:opacity-40"
-              disabled={!data.meta.hasNext}
+              disabled={!data?.meta?.hasNext}
               onClick={() => setPage((p) => p + 1)}
             >
               Next

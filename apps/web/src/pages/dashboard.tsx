@@ -17,6 +17,7 @@ import {
 } from "@/lib/hooks";
 import { MovementTrendChart } from "@/components/movement-trend-chart";
 import { PageHeader } from "@/components/page-header";
+import { ErrorState } from "@/components/error-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
@@ -61,9 +62,9 @@ function KpiCard({
 
 export function DashboardPage() {
   const { data: kpis, isLoading: kpisLoading } = useKpis();
-  const { data: capacity } = useCapacity();
-  const { data: summary } = useInventorySummary();
-  const { data: trend, isLoading: trendLoading } = useMovementTrend();
+  const { data: capacity, error: capacityError } = useCapacity();
+  const { data: summary, error: summaryError } = useInventorySummary();
+  const { data: trend, isLoading: trendLoading, error: trendError } = useMovementTrend();
 
   return (
     <div>
@@ -131,7 +132,12 @@ export function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {trendLoading || !trend ? (
+            {trendError ? (
+              <ErrorState
+                title="Failed to load movement trend"
+                message={trendError instanceof Error ? trendError.message : undefined}
+              />
+            ) : trendLoading || !trend ? (
               <Skeleton className="h-[280px] w-full" />
             ) : (
               <>
@@ -164,7 +170,12 @@ export function DashboardPage() {
             <CardTitle className="text-base">Warehouse capacity</CardTitle>
           </CardHeader>
           <CardContent>
-            {!capacity ? (
+            {capacityError ? (
+              <ErrorState
+                title="Failed to load capacity"
+                message={capacityError instanceof Error ? capacityError.message : undefined}
+              />
+            ) : !capacity ? (
               <Skeleton className="h-40 w-full" />
             ) : (
               <>
@@ -183,10 +194,10 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-4">
-                  {capacity.warehouses.length === 0 && (
+                  {(capacity.warehouses ?? []).length === 0 && (
                     <div className="text-sm text-muted-foreground">No warehouses yet.</div>
                   )}
-                  {capacity.warehouses.map((w) => {
+                  {(capacity.warehouses ?? []).map((w) => {
                     const pct = Math.round(Math.min(100, w.utilizationPct));
                     const barColor =
                       pct >= 85 ? "bg-danger" : pct >= 60 ? "bg-warning" : "bg-success";
@@ -229,6 +240,12 @@ export function DashboardPage() {
             <CardTitle className="text-base">Inventory summary</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            {summaryError ? (
+              <ErrorState
+                title="Failed to load inventory summary"
+                message={summaryError instanceof Error ? summaryError.message : undefined}
+              />
+            ) : (
             <div className="max-h-[420px] overflow-auto">
               <table className="data-table">
                 <thead>
@@ -268,6 +285,7 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </CardContent>
         </Card>
       </div>
