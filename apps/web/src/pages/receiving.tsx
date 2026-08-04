@@ -871,12 +871,20 @@ export function ReceivingPage() {
         onValueChange={(v) => setView(v as typeof view)}
         className="mb-6"
       >
-        <TabsList>
+        <TabsList variant="line" className="gap-1 border-b border-[#f0f0f0] pb-px">
           <TabsTrigger value="po-list">Purchase orders</TabsTrigger>
-          <TabsTrigger value="po-detail" disabled={!selectedPoId}>
+          <TabsTrigger
+            value="po-detail"
+            disabled={!selectedPoId}
+            className="disabled:cursor-not-allowed"
+          >
             PO detail
           </TabsTrigger>
-          <TabsTrigger value="receipt" disabled={staged.length === 0}>
+          <TabsTrigger
+            value="receipt"
+            disabled={staged.length === 0}
+            className="disabled:cursor-not-allowed"
+          >
             Active receipt ({staged.length})
           </TabsTrigger>
         </TabsList>

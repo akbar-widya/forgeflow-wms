@@ -1,0 +1,226 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e60]:
+      - complementary [ref=e61]:
+        - generic [ref=e74]:
+          - generic [ref=e75]: ForgeFlow
+          - generic [ref=e76]: WMS · v0.1
+        - navigation [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e79]: Overview
+            - link "Dashboard" [ref=e80] [cursor=pointer]:
+              - /url: /dashboard
+          - generic [ref=e86]:
+            - generic [ref=e87]: Operations
+            - link "Inbound Receiving" [ref=e88] [cursor=pointer]:
+              - /url: /inbound/receiving
+            - link "Job Allocation" [ref=e94] [cursor=pointer]:
+              - /url: /outbound/job-allocation
+          - generic [ref=e98]:
+            - generic [ref=e99]: Records
+            - link "Stock Movements" [ref=e100] [cursor=pointer]:
+              - /url: /movements
+            - link "Notifications" [ref=e103] [cursor=pointer]:
+              - /url: /notifications
+          - generic [ref=e107]:
+            - generic [ref=e108]: Setup
+            - link "Master Data" [ref=e109] [cursor=pointer]:
+              - /url: /master-data
+        - generic [ref=e114]:
+          - generic [ref=e115]: Cloudflare D1 · SQLite
+          - generic [ref=e116]: © 2026 Akbar Widya. All rights reserved.
+      - main [ref=e117]:
+        - generic [ref=e118]:
+          - generic [ref=e119]: Tuesday, August 4, 2026
+          - button "AU Admin User admin · EMP-001" [ref=e121]:
+            - generic [ref=e122]: AU
+            - generic [ref=e124]:
+              - generic [ref=e125]: Admin User
+              - generic [ref=e126]: admin · EMP-001
+        - generic [ref=e128]:
+          - generic [ref=e130]:
+            - heading "Dashboard" [level=1] [ref=e131]
+            - paragraph [ref=e132]: Stock register, capacity and operational analytics
+          - generic [ref=e133]:
+            - generic [ref=e135] [cursor=pointer]:
+              - generic [ref=e136]: Active SKUs
+              - generic [ref=e148]: "14"
+            - generic [ref=e150] [cursor=pointer]:
+              - generic [ref=e151]: On-hand qty
+              - generic [ref=e159]: 3,650
+            - generic [ref=e161] [cursor=pointer]:
+              - generic [ref=e162]: Warehouses
+              - generic [ref=e167]: "5"
+            - generic [ref=e169] [cursor=pointer]:
+              - generic [ref=e170]: Low stock
+              - generic [ref=e174]: "0"
+            - link "Open POs 0" [ref=e175] [cursor=pointer]:
+              - /url: /inbound/receiving
+              - generic [ref=e177]:
+                - generic [ref=e178]: Open POs
+                - generic [ref=e183]: "0"
+            - link "Open jobs 2" [ref=e184] [cursor=pointer]:
+              - /url: /outbound/job-allocation
+              - generic [ref=e186]:
+                - generic [ref=e187]: Open jobs
+                - generic [ref=e192]: "2"
+          - generic [ref=e193]:
+            - generic [ref=e194]:
+              - generic [ref=e196]:
+                - generic [ref=e197]: Movements trend
+                - generic [ref=e198]:
+                  - generic [ref=e199]: Inbound
+                  - generic [ref=e201]: Outbound
+              - generic [ref=e203]:
+                - generic [ref=e204]:
+                  - generic [ref=e205]:
+                    - generic [ref=e209]: Total inbound
+                    - generic [ref=e210]: 1,560
+                  - generic [ref=e211]:
+                    - generic [ref=e215]: Total outbound
+                    - generic [ref=e216]: 1,240
+                - img [ref=e221]:
+                  - generic [ref=e225]:
+                    - generic [ref=e226]: Jul 29
+                    - generic [ref=e228]: Jul 30
+                    - generic [ref=e230]: Jul 31
+                    - generic [ref=e232]: Aug 01
+                    - generic [ref=e234]: Aug 02
+                    - generic [ref=e236]: Aug 03
+                    - generic [ref=e238]: Aug 04
+                  - generic [ref=e241]:
+                    - generic [ref=e242]: "0"
+                    - generic [ref=e244]: "80"
+                    - generic [ref=e246]: "160"
+                    - generic [ref=e248]: "240"
+                    - generic [ref=e250]: "320"
+            - generic [ref=e264]:
+              - generic [ref=e265]: Warehouse capacity
+              - generic [ref=e267]:
+                - generic [ref=e268]:
+                  - generic [ref=e269]:
+                    - generic [ref=e270]: Overall utilization
+                    - generic [ref=e271]: 8%
+                  - generic [ref=e272]:
+                    - generic [ref=e273]: 3,650
+                    - generic [ref=e274]: of 44,000 capacity
+                - generic [ref=e275]:
+                  - generic [ref=e276]:
+                    - generic [ref=e277]:
+                      - generic [ref=e278]:
+                        - generic [ref=e279]: WH-01
+                        - generic [ref=e280]: Central Distribution Center
+                      - generic [ref=e281]: 150 / 12,000
+                    - generic [ref=e284]:
+                      - generic [ref=e285]: capacity
+                      - generic [ref=e286]: 1%
+                  - generic [ref=e287]:
+                    - generic [ref=e288]:
+                      - generic [ref=e289]:
+                        - generic [ref=e290]: WH-02
+                        - generic [ref=e291]: Raw Material Depot
+                      - generic [ref=e292]: 3,410 / 30,000
+                    - generic [ref=e295]:
+                      - generic [ref=e296]: capacity
+                      - generic [ref=e297]: 11%
+                  - generic [ref=e298]:
+                    - generic [ref=e299]:
+                      - generic [ref=e300]:
+                        - generic [ref=e301]: WH-03
+                        - generic [ref=e302]: Finished Goods Vault
+                      - generic [ref=e303]: 0 / 0
+                    - generic [ref=e305]:
+                      - generic [ref=e306]: capacity
+                      - generic [ref=e307]: 0%
+                  - generic [ref=e308]:
+                    - generic [ref=e309]:
+                      - generic [ref=e310]:
+                        - generic [ref=e311]: WH-04
+                        - generic [ref=e312]: Quarantine & Inspection
+                      - generic [ref=e313]: 0 / 0
+                    - generic [ref=e315]:
+                      - generic [ref=e316]: capacity
+                      - generic [ref=e317]: 0%
+                  - generic [ref=e318]:
+                    - generic [ref=e319]:
+                      - generic [ref=e320]:
+                        - generic [ref=e321]: WH-05
+                        - generic [ref=e322]: Cold Storage Unit
+                      - generic [ref=e323]: 90 / 2,000
+                    - generic [ref=e326]:
+                      - generic [ref=e327]: capacity
+                      - generic [ref=e328]: 5%
+          - generic [ref=e330]:
+            - generic [ref=e331]: Inventory summary
+            - table [ref=e335]:
+              - rowgroup [ref=e336]:
+                - row [ref=e337]:
+                  - columnheader "SKU" [ref=e338]
+                  - columnheader "Item" [ref=e339]
+                  - columnheader "UoM" [ref=e340]
+                  - columnheader "On-hand" [ref=e341]
+                  - columnheader "Allocated" [ref=e342]
+                  - columnheader "Available" [ref=e343]
+                  - columnheader "Status" [ref=e344]
+              - rowgroup [ref=e345]:
+                - row [ref=e346]:
+                  - cell "FS-0001" [ref=e347]
+                  - cell "Titanium Screws M4" [ref=e348]
+                  - cell "BOX" [ref=e349]
+                  - cell "1,870" [ref=e350]
+                  - cell "0" [ref=e351]
+                  - cell "1,870" [ref=e352]
+                  - cell "Available" [ref=e353]
+                - row [ref=e355]:
+                  - cell "RM-0002" [ref=e356]
+                  - cell "Aluminum Extrusion 2m" [ref=e357]
+                  - cell "PCS" [ref=e358]
+                  - cell "580" [ref=e359]
+                  - cell "0" [ref=e360]
+                  - cell "580" [ref=e361]
+                  - cell "Available" [ref=e362]
+                - row [ref=e364]:
+                  - cell "RM-0001" [ref=e365]
+                  - cell "Steel Bracket 4in" [ref=e366]
+                  - cell "PCS" [ref=e367]
+                  - cell "960" [ref=e368]
+                  - cell "0" [ref=e369]
+                  - cell "960" [ref=e370]
+                  - cell "Available" [ref=e371]
+                - row [ref=e373]:
+                  - cell "CH-0001" [ref=e374]
+                  - cell "Industrial Lubricant 5L" [ref=e375]
+                  - cell "L" [ref=e376]
+                  - cell "90" [ref=e377]
+                  - cell "0" [ref=e378]
+                  - cell "90" [ref=e379]
+                  - cell "Available" [ref=e380]
+                - row [ref=e382]:
+                  - cell "CH-0002" [ref=e383]
+                  - cell "Epoxy Resin Part A" [ref=e384]
+                  - cell "L" [ref=e385]
+                  - cell "0" [ref=e386]
+                  - cell "0" [ref=e387]
+                  - cell "0" [ref=e388]
+                  - cell "Out of stock" [ref=e389]
+                - row [ref=e391]:
+                  - cell "FS-0004" [ref=e392]
+                  - cell "Steel Rivet 3mm" [ref=e393]
+                  - cell "BOX" [ref=e394]
+                  - cell "150" [ref=e395]
+                  - cell "0" [ref=e396]
+                  - cell "150" [ref=e397]
+                  - cell "Available" [ref=e398]
+                - row [ref=e400]:
+                  - cell "FS-0003" [ref=e401]
+                  - cell "Lock Washer 5mm" [ref=e402]
+                  - cell "BOX" [ref=e403]
+                  - cell "0" [ref=e404]
+                  - cell "0" [ref=e405]
+                  - cell "0" [ref=e406]
+                  - cell "Out of stock" [ref=e407]
+    - region "Notifications alt+T":
+      - list:
+        - listitem [ref=e409]:
+          - generic [ref=e414]: Signed in as Admin
+  - generic [ref=e416]: "0"
